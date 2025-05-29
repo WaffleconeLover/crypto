@@ -50,6 +50,7 @@ first_loop_lvts = np.arange(40.0, 52.5, 2.5)
 second_loop_lvts = np.arange(30.0, 51.0, 1.0)  # 1% increments from 30 to 50
 
 # Calculate health score and ETH exposure (mock logic)
+# Calculate health score and ETH exposure (mock logic)
 data = []
 for s_ltv in second_loop_lvts:
     for f_ltv in first_loop_lvts:
@@ -59,13 +60,14 @@ for s_ltv in second_loop_lvts:
         pct_gain = ((total_eth / eth_stack) - 1) * 100
         liq_drop = round((1 - (1 / final_hs)) * 100)
         liq_price = round(eth_price * (1 - liq_drop / 100))
+        label_base = f"HS: {final_hs:.2f} | ${loop2_usdc:,} | ↓{liq_drop}% @ ${liq_price:,} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
         data.append({
             "Second LTV": s_ltv,
             "First LTV": f_ltv,
             "Final Health Score": final_hs,
             "Loop 2 USDC": loop2_usdc,
             "Total ETH": total_eth,
-            "Label Base": f"HS: {final_hs:.2f} | ${loop2_usdc:,} | ↓{liq_drop}% @ ${liq_price:,} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
+            "Label Base": label_base
         })
 
 # Filter top 10 by Total ETH with HS >= 1.66 and matching First LTV
@@ -91,6 +93,3 @@ fig, ax = plt.subplots(figsize=(10, 14))
 sns.heatmap(pivot_hs, annot=pivot_labels, fmt="", cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)
 plt.title("ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
 st.pyplot(fig)
-
-st.markdown("---")
-st.markdown("**Instructions:** Use this tool to explore safe LTV combinations and estimate ETH growth across leverage cycles.")
