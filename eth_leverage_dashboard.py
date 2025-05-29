@@ -63,9 +63,10 @@ for s_ltv in second_loop_lvts:
             "Label Base": f"{final_hs:.2f}\n${loop2_usdc}\n\u2193{liq_drop}% @ ${liq_price}\n{total_eth:.2f} ETH (+{int(pct_gain)}%)"
         })
 
-# Identify Top 10 combinations by Total ETH
-sorted_data = sorted(data, key=lambda x: x["Total ETH"], reverse=True)
-top_labels = { (d["First LTV"], d["Second LTV"]): rank+1 for rank, d in enumerate(sorted_data[:10]) }
+# Filter top 10 by Total ETH with HS >= 1.66
+safe_data = [d for d in data if d["Final Health Score"] >= 1.66]
+sorted_safe_data = sorted(safe_data, key=lambda x: x["Total ETH"], reverse=True)
+top_labels = { (d["First LTV"], d["Second LTV"]): rank+1 for rank, d in enumerate(sorted_safe_data[:10]) }
 
 # Add ranks to labels
 for entry in data:
