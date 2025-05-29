@@ -9,25 +9,20 @@ st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allo
 
 st.title("ETH Leverage Heatmap (Plotly Edition)")
 
-# Session state defaults
-if "eth_stack" not in st.session_state:
-    st.session_state.eth_stack = 6.73
-if "eth_price" not in st.session_state:
-    st.session_state.eth_price = 2660.0
-if "first_ltv" not in st.session_state:
-    st.session_state.first_ltv = 40.0
+# Resettable defaults
+DEFAULT_ETH_STACK = 6.73
+DEFAULT_ETH_PRICE = 2660.0
+DEFAULT_FIRST_LTV = 40.0
 
 # Reset button
 if st.button("🔄 Reset to Defaults"):
-    st.session_state.eth_stack = 6.73
-    st.session_state.eth_price = 2660.0
-    st.session_state.first_ltv = 40.0
-    st.experimental_rerun()
+    st.experimental_set_query_params(reset="true")
+    st.rerun()
 
 # Sliders
-eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=st.session_state.eth_stack, step=0.01, key="eth_stack")
-eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=st.session_state.eth_price, step=10, key="eth_price")
-first_ltv = st.slider("First Loop LTV (%)", min_value=40.0, max_value=50.0, value=st.session_state.first_ltv, step=2.5, key="first_ltv")
+eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=DEFAULT_ETH_STACK, step=0.01)
+eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=DEFAULT_ETH_PRICE, step=10)
+first_ltv = st.slider("First Loop LTV (%)", min_value=40.0, max_value=50.0, value=DEFAULT_FIRST_LTV, step=2.5)
 
 # LP exit simulation
 st.markdown("### LP Exit Simulation")
@@ -86,4 +81,4 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
-st.markdown("**This version uses Plotly to ensure full compatibility with Streamlit and avoid matplotlib errors.**")
+st.markdown("**This version avoids session state conflicts and uses Plotly for clean, interactive heatmaps.**")
