@@ -36,8 +36,8 @@ for s_ltv in second_loop_lvts:
 
 # Build DataFrame
 heatmap_df = pd.DataFrame(data)
-pivot_hs = heatmap_df.pivot("Second LTV", "First LTV", "Final Health Score")
-pivot_labels = heatmap_df.pivot("Second LTV", "First LTV", "Label")
+pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
+pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
 
 # Display Heatmap
 fig, ax = plt.subplots(figsize=(14, 10))
