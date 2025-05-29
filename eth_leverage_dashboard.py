@@ -1,14 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Page config
 st.set_page_config(page_title="ETH Leverage Strategy Dashboard", layout="wide")
 st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allow_html=True)
 
-st.title("ETH Leverage Heatmap")
+st.title("ETH Leverage Heatmap (imshow fallback)")
 
 # Session state defaults
 if "eth_stack" not in st.session_state:
@@ -62,17 +61,19 @@ for s_ltv in second_loop_lvts:
 df = pd.DataFrame(data)
 pivot_hs = df.pivot(index="Second LTV", columns="Final Health Score", values="Final Health Score")
 
-# Check for bad data before plotting
+# Diagnostic check
 if pivot_hs.isnull().values.any() or np.isinf(pivot_hs.values).any():
-    st.error("❌ NaN or Inf found in heatmap data. Plotting skipped.")
+    st.error("❌ NaN or Inf found in data.")
     st.dataframe(pivot_hs)
 else:
-    st.success("✅ Heatmap data looks clean. Rendering plot...")
+    st.success("✅ Data is clean. Rendering with imshow...")
 
-    # Plot stripped-down heatmap (no title, no labels)
+    # Plot using imshow (no matplotlib text rendering)
     fig, ax = plt.subplots(figsize=(12, 12))
-    sns.heatmap(pivot_hs, annot=False, fmt="", cmap="RdYlGn", cbar=False, ax=ax)
+    ax.imshow(pivot_hs.values, aspect='auto', cmap='RdYlGn')
+    ax.set_xticks([])  # remove all axis text
+    ax.set_yticks([])
     st.pyplot(fig)
 
 st.markdown("---")
-st.markdown("**Instructions:** This version checks for invalid values and renders the raw heatmap grid with minimal styling to isolate errors.**")
+st.markdown("**This fallback uses imshow to bypass matplotlib's mathtext and font rendering system.**")
