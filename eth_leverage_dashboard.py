@@ -55,7 +55,10 @@ for s_ltv in second_loop_lvts:
     pct_gain = ((total_eth / eth_stack) - 1) * 100
     liq_drop = round((1 - (1 / final_hs)) * 100)
     liq_price = round(eth_price * (1 - liq_drop / 100))
-    label = f"{final_hs:.2f} | ${loop2_usdc} | ↓{liq_drop}% @ ${liq_price} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
+    
+    # Avoid special characters like ↓ that matplotlib can't parse
+    label = f"{final_hs:.2f} | ${loop2_usdc} | Drop {liq_drop}% @ ${liq_price} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
+    
     data.append({
         "Second LTV": s_ltv,
         "Final Health Score": final_hs,
@@ -74,10 +77,8 @@ df_sorted["Label"] = df_sorted["Label"] + df_sorted["Top"].apply(lambda x: f" | 
 pivot_hs = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Final Health Score")
 pivot_labels = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Label")
 
-# Fix matplotlib mathtext parsing issues
+# Plot with safer text rendering
 plt.rcParams['mathtext.default'] = 'regular'
-
-# Plot
 fig, ax = plt.subplots(figsize=(12, 12))
 sns.heatmap(pivot_hs, annot=pivot_labels, fmt="", cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)
 plt.title("ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
