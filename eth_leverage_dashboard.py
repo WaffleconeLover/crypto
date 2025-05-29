@@ -74,6 +74,9 @@ df_sorted["Label"] = df_sorted["Label"] + df_sorted["Top"].apply(lambda x: f" | 
 pivot_hs = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Final Health Score")
 pivot_labels = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Label")
 
+# Fix matplotlib mathtext parsing issues
+plt.rcParams['mathtext.default'] = 'regular'
+
 # Plot
 fig, ax = plt.subplots(figsize=(12, 12))
 sns.heatmap(pivot_hs, annot=pivot_labels, fmt="", cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)
