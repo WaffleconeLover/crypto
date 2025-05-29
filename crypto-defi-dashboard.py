@@ -52,11 +52,12 @@ for s_ltv in second_loop_lvts:
 
 heatmap_df = pd.DataFrame(data)
 
-# Adjusted score to favor safer (greener) zones
+# Rebalanced scoring to include Loop 2 Debt
 heatmap_df["Score"] = (
-    heatmap_df["Final Health Score"] * 50 +  # strong bias toward safety
-    heatmap_df["Liq Drop %"] * 0.5 +
-    heatmap_df["ETH Gain %"] * 0.2
+    heatmap_df["Final Health Score"] * 40 +  # strong weight on safety
+    heatmap_df["Liq Drop %"] * 0.4 +
+    heatmap_df["ETH Gain %"] * 0.2 +
+    heatmap_df["Loop 2 Debt"] * 0.015  # incentivize bigger LP opportunity
 )
 
 # Rank top 10 by adjusted score
