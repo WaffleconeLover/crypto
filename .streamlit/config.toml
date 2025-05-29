@@ -1,0 +1,13 @@
+[server]
+headless = true
+
+[theme]
+primaryColor="#636efa"
+backgroundColor="#111111"
+secondaryBackgroundColor="#1e1e1e"
+textColor="#ffffff"
+font="sans serif"
+
+[general]
+# Replace with your actual filename
+mainPage = "defi_dash.py"
