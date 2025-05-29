@@ -63,10 +63,9 @@ heatmap_df["Score"] = (
     heatmap_df["Loop 2 Debt"] * 0.015
 )
 
-# Rank top 10 by adjusted score
-top10 = heatmap_df.sort_values("Score", ascending=False).head(10).copy()
-top10["Rank"] = range(1, 11)
-heatmap_df = heatmap_df.merge(top10[["First LTV", "Second LTV", "Rank"]], on=["First LTV", "Second LTV"], how="left")
+# Rank all rows by adjusted score
+heatmap_df = heatmap_df.sort_values("Score", ascending=False).copy()
+heatmap_df["Rank"] = range(1, len(heatmap_df) + 1)
 
 # Build label with rank on final line
 heatmap_df["Label"] = heatmap_df.apply(
@@ -74,8 +73,8 @@ heatmap_df["Label"] = heatmap_df.apply(
         f"{row['Final Health Score']:.2f}\n"
         f"${row['Loop 2 Debt']}\n"
         f"↓{row['Liq Drop %']}% @ ${row['Liq Price']}\n"
-        f"{row['Total ETH']:.2f} ETH (+{int(row['ETH Gain %'])}%)"
-        + (f"\n#{int(row['Rank'])}" if pd.notna(row['Rank']) else "")
+        f"{row['Total ETH']:.2f} ETH (+{int(row['ETH Gain %'])}%)\n"
+        f"#{int(row['Rank'])}"
     ),
     axis=1
 )
