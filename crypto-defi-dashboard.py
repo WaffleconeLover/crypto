@@ -52,12 +52,15 @@ for s_ltv in second_loop_lvts:
 
 heatmap_df = pd.DataFrame(data)
 
+# Filter to minimum health threshold
+heatmap_df = heatmap_df[heatmap_df["Final Health Score"] >= 1.6].copy()
+
 # Rebalanced scoring to include Loop 2 Debt
 heatmap_df["Score"] = (
-    heatmap_df["Final Health Score"] * 40 +  # strong weight on safety
+    heatmap_df["Final Health Score"] * 40 +
     heatmap_df["Liq Drop %"] * 0.4 +
     heatmap_df["ETH Gain %"] * 0.2 +
-    heatmap_df["Loop 2 Debt"] * 0.015  # incentivize bigger LP opportunity
+    heatmap_df["Loop 2 Debt"] * 0.015
 )
 
 # Rank top 10 by adjusted score
