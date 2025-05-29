@@ -52,12 +52,14 @@ for s_ltv in second_loop_lvts:
 
 heatmap_df = pd.DataFrame(data)
 
-# Compute composite score and rank
+# Adjusted score to favor safer (greener) zones
 heatmap_df["Score"] = (
-    heatmap_df["ETH Gain %"] * 0.4 +
-    heatmap_df["Final Health Score"] * 30 +
-    heatmap_df["Liq Drop %"] * 0.3
+    heatmap_df["Final Health Score"] * 50 +  # strong bias toward safety
+    heatmap_df["Liq Drop %"] * 0.5 +
+    heatmap_df["ETH Gain %"] * 0.2
 )
+
+# Rank top 10 by adjusted score
 top10 = heatmap_df.sort_values("Score", ascending=False).head(10).copy()
 top10["Rank"] = range(1, 11)
 heatmap_df = heatmap_df.merge(top10[["First LTV", "Second LTV", "Rank"]], on=["First LTV", "Second LTV"], how="left")
