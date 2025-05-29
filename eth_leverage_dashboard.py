@@ -58,7 +58,7 @@ for s_ltv in second_loop_lvts:
         pct_gain = ((total_eth / eth_stack) - 1) * 100
         liq_drop = round((1 - (1 / final_hs)) * 100)  # approximate
         liq_price = round(eth_price * (1 - liq_drop / 100))
-        label = f"{final_hs:.2f}\n${loop2_usdc}\n↓{liq_drop}% @ ${liq_price}\n{total_eth:.2f} ETH (+{int(pct_gain)}%)"
+       label = f\"{final_hs:.2f}\
         data.append({
             "Second LTV": s_ltv,
             "First LTV": f_ltv,
