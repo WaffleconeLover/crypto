@@ -14,7 +14,7 @@ st.title("ETH Leverage Heatmap")
 
 # Reset Button
 if st.button("🔄 Reset to Defaults"):
-    st.experimental_rerun()
+    st.rerun()
 
 # User Inputs with Sliders
 eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=6.73, step=0.01)
