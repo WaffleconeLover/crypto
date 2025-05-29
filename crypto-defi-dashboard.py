@@ -72,6 +72,7 @@ def strip_zero(val):
 
 heatmap_df["Label"] = heatmap_df.apply(
     lambda row: (
+        f"{strip_zero(row['Final Health Score'])}\n"
         f"${row['Loop 2 Debt']}\n"
         f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
         f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
