@@ -20,7 +20,12 @@ if "eth_price" not in st.session_state:
 if "first_ltv" not in st.session_state:
     st.session_state.first_ltv = 40.0
 
-# Reset Button
+# Sliders using current session state values
+eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=st.session_state.eth_stack, step=0.01)
+eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=st.session_state.eth_price, step=10)
+first_ltv_input = st.slider("First Loop LTV (%)", min_value=40.0, max_value=50.0, value=st.session_state.first_ltv, step=2.5)
+
+# Reset Button — resets session state and re-runs
 if st.button("🔄 Reset to Defaults"):
     st.session_state.eth_stack = 6.73
     st.session_state.eth_price = 2660
