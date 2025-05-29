@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-import re  # for regex cleaning
 
 # Page config
 st.set_page_config(page_title="ETH Leverage Strategy Dashboard", layout="wide")
@@ -53,42 +52,27 @@ for s_ltv in second_loop_lvts:
     final_hs = 1.78 - ((first_ltv - 40) + (s_ltv - 30)) * 0.01
     loop2_usdc = round((eth_stack * eth_price) * (first_ltv / 100) * (s_ltv / 100), -2)
     total_eth = eth_stack + (loop2_usdc / eth_price)
-    pct_gain = ((total_eth / eth_stack) - 1) * 100
-    liq_drop = round((1 - (1 / final_hs)) * 100)
-    liq_price = round(eth_price * (1 - liq_drop / 100))
-
-    # Clean label using regex to strip non-ASCII characters
-    raw_label = f"{final_hs:.2f} | ${loop2_usdc} | Drop {liq_drop}% @ ${liq_price} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
-    label = re.sub(r'[^\x00-\x7F]+', '', raw_label)
-
     data.append({
         "Second LTV": s_ltv,
         "Final Health Score": final_hs,
-        "Label": label,
         "ETH Total": total_eth
     })
 
-# Top 10 markers
+# Build pivot table
 df = pd.DataFrame(data)
-df_sorted = df.sort_values(by="ETH Total", ascending=False).reset_index(drop=True)
-df_sorted["Top"] = df_sorted.index + 1
-df_sorted.loc[df_sorted["Top"] > 10, "Top"] = ""
-df_sorted["Label"] = df_sorted["Label"] + df_sorted["Top"].apply(lambda x: f" | #{x}" if x != "" else "")
+pivot_hs = df.pivot(index="Second LTV", columns="Final Health Score", values="Final Health Score")
 
-# Heatmap prep
-pivot_hs = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Final Health Score")
-pivot_labels = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Label")
+# Check for bad data before plotting
+if pivot_hs.isnull().values.any() or np.isinf(pivot_hs.values).any():
+    st.error("❌ NaN or Inf found in heatmap data. Plotting skipped.")
+    st.dataframe(pivot_hs)
+else:
+    st.success("✅ Heatmap data looks clean. Rendering plot...")
 
-# Show labels in the app to help debug
-st.markdown("### 🔍 Heatmap Label Preview (for debugging)")
-st.dataframe(pivot_labels)
-
-# Plot with annotations disabled to avoid crash
-plt.rcParams['mathtext.default'] = 'regular'
-fig, ax = plt.subplots(figsize=(12, 12))
-sns.heatmap(pivot_hs, cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)  # no annot here
-plt.title("ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
-st.pyplot(fig)
+    # Plot stripped-down heatmap (no title, no labels)
+    fig, ax = plt.subplots(figsize=(12, 12))
+    sns.heatmap(pivot_hs, annot=False, fmt="", cmap="RdYlGn", cbar=False, ax=ax)
+    st.pyplot(fig)
 
 st.markdown("---")
-st.markdown("**Instructions:** Use this tool to explore safe LTV combinations and estimate ETH growth across leverage cycles.")
+st.markdown("**Instructions:** This version checks for invalid values and renders the raw heatmap grid with minimal styling to isolate errors.**")
