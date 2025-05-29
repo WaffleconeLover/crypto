@@ -65,10 +65,10 @@ for s_ltv in second_loop_lvts:
             "Final Health Score": final_hs,
             "Loop 2 USDC": loop2_usdc,
             "Total ETH": total_eth,
-            "Label Base": f"{final_hs:.2f}\n${loop2_usdc}\n\u2193{liq_drop}% @ ${liq_price}\n{total_eth:.2f} ETH (+{int(pct_gain)}%)"
+            "Label Base": f"HS: {final_hs:.2f} | ${loop2_usdc} | ↓{liq_drop}% @ ${liq_price} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
         })
 
-# Filter top 10 by Total ETH with HS >= 1.66
+# Filter top 10 by Total ETH with HS >= 1.66 and matching First LTV
 safe_data = [d for d in data if d["Final Health Score"] >= 1.66 and d["First LTV"] == first_ltv_input]
 sorted_safe_data = sorted(safe_data, key=lambda x: x["Total ETH"], reverse=True)
 top_labels = { (d["First LTV"], d["Second LTV"]): rank+1 for rank, d in enumerate(sorted_safe_data[:10]) }
@@ -76,7 +76,7 @@ top_labels = { (d["First LTV"], d["Second LTV"]): rank+1 for rank, d in enumerat
 # Add ranks to labels
 for entry in data:
     key = (entry["First LTV"], entry["Second LTV"])
-    rank_label = f"\n#{top_labels[key]}" if key in top_labels else ""
+    rank_label = f" | #{top_labels[key]}" if key in top_labels else ""
     entry["Label"] = entry["Label Base"] + rank_label
 
 # Filter for current column view only
@@ -86,7 +86,8 @@ pivot_hs = filtered_df.pivot(index="Second LTV", columns="First LTV", values="Fi
 pivot_labels = filtered_df.pivot(index="Second LTV", columns="First LTV", values="Label")
 
 # Display Heatmap
-fig, ax = plt.subplots(figsize=(8, 10))
+sns.set(font_scale=0.7)
+fig, ax = plt.subplots(figsize=(8, 14))
 sns.heatmap(pivot_hs, annot=pivot_labels, fmt="", cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)
 plt.title("ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
 st.pyplot(fig)
