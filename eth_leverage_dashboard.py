@@ -58,19 +58,19 @@ for s_ltv in second_loop_lvts:
         pct_gain = ((total_eth / eth_stack) - 1) * 100
         liq_drop = round((1 - (1 / final_hs)) * 100)  # approximate
         liq_price = round(eth_price * (1 - liq_drop / 100))
-        label_base = f"HS: {final_hs:.2f} | ${loop2_usdc:,} | Drop: {liq_drop}% @ ${liq_price:,} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
+        label = f"{final_hs:.2f}\n${loop2_usdc}\n↓{liq_drop}% @ ${liq_price}\n{total_eth:.2f} ETH (+{int(pct_gain)}%)"
         data.append({
             "Second LTV": s_ltv,
             "First LTV": f_ltv,
             "Final Health Score": final_hs,
-            "Label": label_base,
+            "Label": label,
             "Total ETH": total_eth
         })
 
 # Sort top 10 by total ETH gained
 ranked = sorted(data, key=lambda x: x["Total ETH"], reverse=True)[:10]
 for i, entry in enumerate(ranked):
-    entry["Label"] += f" | #{i+1}"
+    entry["Label"] += f"\n#{i+1}"
 
 # Build DataFrame
 heatmap_df = pd.DataFrame(data)
