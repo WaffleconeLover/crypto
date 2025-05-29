@@ -15,10 +15,30 @@ st.title("ETH Leverage Heatmap")
 # Reset Button
 if st.button("🔄 Reset to Defaults"):
     st.rerun()
+    # Session state defaults
+if "eth_stack" not in st.session_state:
+    st.session_state.eth_stack = 6.73
+if "eth_price" not in st.session_state:
+    st.session_state.eth_price = 2660
 
 # User Inputs with Sliders
-eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=6.73, step=0.01)
-eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=2660, step=10)
+eth_stack = st.slider(
+    "Current ETH Stack", 
+    min_value=1.0, 
+    max_value=50.0, 
+    value=st.session_state.eth_stack, 
+    step=0.01, 
+    key="eth_stack"
+)
+
+eth_price = st.slider(
+    "Current ETH Price ($)", 
+    min_value=500, 
+    max_value=10000, 
+    value=st.session_state.eth_price, 
+    step=10, 
+    key="eth_price"
+)
 
 # Simulate LP Exit and Top-Up Panel
 st.markdown("### LP Exit Simulation")
