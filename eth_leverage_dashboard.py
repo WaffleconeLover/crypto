@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,11 +6,32 @@ import matplotlib.pyplot as plt
 
 # Streamlit Page Setup
 st.set_page_config(page_title="ETH Leverage Strategy Dashboard", layout="wide")
+
+# Add layout spacing controls
+st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allow_html=True)
+
 st.title("ETH Leverage Heatmap")
 
-# User Inputs
-eth_stack = st.number_input("Current ETH Stack", min_value=0.0, value=6.73, step=0.01)
-eth_price = st.number_input("Current ETH Price ($)", min_value=0.0, value=2660.0, step=10.0)
+# Reset Button
+if st.button("🔄 Reset to Defaults"):
+    st.experimental_rerun()
+
+# User Inputs with Sliders
+eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=6.73, step=0.01)
+eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=2660, step=10)
+
+# Simulate LP Exit and Top-Up Panel
+st.markdown("### LP Exit Simulation")
+eth_from_lp = st.number_input("ETH Gained from LP", min_value=0.0, value=0.0, step=0.01)
+eth_stack += eth_from_lp
+st.markdown(f"**Updated ETH Stack after LP Exit:** {eth_stack:.2f} ETH")
+
+# Aave Health Indicator (based on 45% base LTV for illustration)
+base_ltv = 0.45
+collateral_value = eth_stack * eth_price
+debt_value = collateral_value * base_ltv
+health_score = collateral_value / debt_value if debt_value else 0
+st.markdown(f"### 🛡️ Estimated Aave Health Score: **{health_score:.2f}** (based on 45% LTV)")
 
 first_loop_lvts = np.arange(40.0, 52.5, 2.5)
 second_loop_lvts = np.arange(30.0, 52.5, 2.5)
@@ -24,7 +44,7 @@ for s_ltv in second_loop_lvts:
         loop2_usdc = round((eth_stack * eth_price) * (f_ltv / 100) * (s_ltv / 100), -2)
         total_eth = eth_stack + (loop2_usdc / eth_price)
         pct_gain = ((total_eth / eth_stack) - 1) * 100
-        liq_drop = round((1 - (1 / final_hs)) * 100)
+        liq_drop = round((1 - (1 / final_hs)) * 100)  # approximate
         liq_price = round(eth_price * (1 - liq_drop / 100))
         label = f"{final_hs:.2f}\n${loop2_usdc}\n\u2193{liq_drop}% @ ${liq_price}\n{total_eth:.2f} ETH (+{int(pct_gain)}%)"
         data.append({
