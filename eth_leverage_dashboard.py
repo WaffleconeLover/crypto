@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import re  # for regex cleaning
 
 # Page config
 st.set_page_config(page_title="ETH Leverage Strategy Dashboard", layout="wide")
@@ -56,9 +57,10 @@ for s_ltv in second_loop_lvts:
     liq_drop = round((1 - (1 / final_hs)) * 100)
     liq_price = round(eth_price * (1 - liq_drop / 100))
 
-    # Fully sanitize labels to remove special characters
-    label = f"{final_hs:.2f} | ${loop2_usdc} | Drop {liq_drop}% @ ${liq_price} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
-    label = label.replace("\\", "\\\\")  # escape any backslashes
+    # Clean label using regex to strip non-ASCII characters
+    raw_label = f"{final_hs:.2f} | ${loop2_usdc} | Drop {liq_drop}% @ ${liq_price} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
+    label = re.sub(r'[^\x00-\x7F]+', '', raw_label)
+
     data.append({
         "Second LTV": s_ltv,
         "Final Health Score": final_hs,
@@ -77,10 +79,14 @@ df_sorted["Label"] = df_sorted["Label"] + df_sorted["Top"].apply(lambda x: f" | 
 pivot_hs = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Final Health Score")
 pivot_labels = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Label")
 
-# Plot with full safety config
+# Show labels in the app to help debug
+st.markdown("### 🔍 Heatmap Label Preview (for debugging)")
+st.dataframe(pivot_labels)
+
+# Plot with annotations disabled to avoid crash
 plt.rcParams['mathtext.default'] = 'regular'
 fig, ax = plt.subplots(figsize=(12, 12))
-sns.heatmap(pivot_hs, annot=pivot_labels, fmt="", cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)
+sns.heatmap(pivot_hs, cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)  # no annot here
 plt.title("ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
 st.pyplot(fig)
 
