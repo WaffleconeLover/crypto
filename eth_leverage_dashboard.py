@@ -65,7 +65,7 @@ for s_ltv in second_loop_lvts:
             "Final Health Score": final_hs,
             "Loop 2 USDC": loop2_usdc,
             "Total ETH": total_eth,
-            "Label Base": f"HS: {final_hs:.2f} | ${loop2_usdc:,} | ↓{liq_drop}% @ ${liq_price:,} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
+            "Label Base": f"HS: {final_hs:.2f} | ${loop2_usdc} | ↓{liq_drop}% @ ${liq_price} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
 
         })
 
