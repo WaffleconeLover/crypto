@@ -55,10 +55,10 @@ for s_ltv in second_loop_lvts:
     pct_gain = ((total_eth / eth_stack) - 1) * 100
     liq_drop = round((1 - (1 / final_hs)) * 100)
     liq_price = round(eth_price * (1 - liq_drop / 100))
-    
-    # Avoid special characters like ↓ that matplotlib can't parse
+
+    # Fully sanitize labels to remove special characters
     label = f"{final_hs:.2f} | ${loop2_usdc} | Drop {liq_drop}% @ ${liq_price} | {total_eth:.2f} ETH (+{int(pct_gain)}%)"
-    
+    label = label.replace("\\", "\\\\")  # escape any backslashes
     data.append({
         "Second LTV": s_ltv,
         "Final Health Score": final_hs,
@@ -77,7 +77,7 @@ df_sorted["Label"] = df_sorted["Label"] + df_sorted["Top"].apply(lambda x: f" | 
 pivot_hs = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Final Health Score")
 pivot_labels = df_sorted.pivot(index="Second LTV", columns="Final Health Score", values="Label")
 
-# Plot with safer text rendering
+# Plot with full safety config
 plt.rcParams['mathtext.default'] = 'regular'
 fig, ax = plt.subplots(figsize=(12, 12))
 sns.heatmap(pivot_hs, annot=pivot_labels, fmt="", cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)
