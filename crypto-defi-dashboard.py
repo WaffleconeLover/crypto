@@ -66,13 +66,15 @@ heatmap_df["Score"] = (
 heatmap_df = heatmap_df.sort_values("Score", ascending=False).copy()
 heatmap_df["Rank"] = range(1, len(heatmap_df) + 1)
 
-# Label
+# Label formatting
+def strip_zero(val):
+    return f"{val:.2f}".rstrip("0").rstrip(".")
+
 heatmap_df["Label"] = heatmap_df.apply(
     lambda row: (
-        f"{row['Final Health Score']:.2f}\n"
         f"${row['Loop 2 Debt']}\n"
-        f"↓{row['Liq Drop %']}% @ ${row['Liq Price']}\n"
-        f"{row['Total ETH']:.2f} ETH (+{int(row['ETH Gain %'])}%)\n"
+        f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
+        f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
         f"#{int(row['Rank'])}"
     ),
     axis=1
@@ -82,8 +84,16 @@ heatmap_df["Label"] = heatmap_df.apply(
 pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
 pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
 
-fig, ax = plt.subplots(figsize=(8, 10))
-sns.heatmap(pivot_hs, annot=pivot_labels, fmt="", cmap="RdYlGn", cbar_kws={'label': 'Final Health Score'}, ax=ax)
+fig, ax = plt.subplots(figsize=(6, 14))  # narrow width, taller layout
+sns.heatmap(
+    pivot_hs,
+    annot=pivot_labels,
+    fmt="",
+    cmap="RdYlGn",
+    cbar_kws={'label': 'Final Health Score'},
+    annot_kws={'fontsize': 7},
+    ax=ax
+)
 plt.title("Top ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
 plt.xlabel("First Loop LTV (%)")
 plt.ylabel("Second Loop LTV (%)")
