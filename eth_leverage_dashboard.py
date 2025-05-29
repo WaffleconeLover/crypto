@@ -70,7 +70,7 @@ for s_ltv in second_loop_lvts:
 # Sort top 10 by total ETH gained
 ranked = sorted(data, key=lambda x: x["Total ETH"], reverse=True)[:10]
 for i, entry in enumerate(ranked):
-    entry["Label"] += f"\n#{i+1}"
+    entry["Label"] += f" | #{i+1}"
 
 # Build DataFrame
 heatmap_df = pd.DataFrame(data)
