@@ -43,18 +43,39 @@ for s_ltv in second_loop_lvts:
         # Exposure gain
         pct_gain = ((total_eth / eth_stack) - 1) * 100
 
-        # Label format
-        label = f"{final_hs:.2f}\n${int(loop2_debt)}\n\u2193{liq_drop_pct}% @ ${liq_price}\n{total_eth:.2f} ETH (+{int(pct_gain)}%)"
-
         data.append({
             "Second LTV": s_ltv,
             "First LTV": f_ltv,
             "Final Health Score": final_hs,
-            "Label": label
+            "Loop 2 Debt": int(loop2_debt),
+            "Liq Price": liq_price,
+            "Liq Drop %": liq_drop_pct,
+            "Total ETH": total_eth,
+            "ETH Gain %": pct_gain
         })
 
-# DataFrame and pivot
+# Rank combinations by composite score (weighted)
 heatmap_df = pd.DataFrame(data)
+heatmap_df["Score"] = (
+    heatmap_df["ETH Gain %"] * 0.4 +
+    heatmap_df["Final Health Score"] * 30 +
+    heatmap_df["Liq Drop %"] * 0.3
+)
+
+# Get top 10 by composite score
+top10 = heatmap_df.sort_values("Score", ascending=False).head(10).copy()
+top10["Rank"] = range(1, 11)
+
+# Merge ranks back into main DataFrame
+heatmap_df = heatmap_df.merge(top10[["First LTV", "Second LTV", "Rank"]], on=["First LTV", "Second LTV"], how="left")
+
+# Build label
+heatmap_df["Label"] = heatmap_df.apply(
+    lambda row: f"{row['Final Health Score']:.2f}\n${row['Loop 2 Debt']}\n\u2193{row['Liq Drop %']}% @ ${row['Liq Price']}\n{row['Total ETH']:.2f} ETH (+{int(row['ETH Gain %'])}%)" + (f"\n#{int(row['Rank'])}" if pd.notna(row['Rank']) else ""),
+    axis=1
+)
+
+# Pivot for heatmap
 pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
 pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
 
