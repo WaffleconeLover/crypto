@@ -1,16 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-mpl.rcParams['text.usetex'] = False
-mpl.rcParams['mathtext.default'] = 'none'
+import plotly.express as px
 
 # Page config
 st.set_page_config(page_title="ETH Leverage Strategy Dashboard", layout="wide")
 st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allow_html=True)
 
-st.title("ETH Leverage Heatmap (imshow fallback)")
+st.title("ETH Leverage Heatmap (Plotly Edition)")
 
 # Session state defaults
 if "eth_stack" not in st.session_state:
@@ -54,29 +51,39 @@ for s_ltv in second_loop_lvts:
     final_hs = 1.78 - ((first_ltv - 40) + (s_ltv - 30)) * 0.01
     loop2_usdc = round((eth_stack * eth_price) * (first_ltv / 100) * (s_ltv / 100), -2)
     total_eth = eth_stack + (loop2_usdc / eth_price)
+    pct_gain = ((total_eth / eth_stack) - 1) * 100
+    liq_drop = round((1 - (1 / final_hs)) * 100)
+    liq_price = round(eth_price * (1 - liq_drop / 100))
     data.append({
         "Second LTV": s_ltv,
         "Final Health Score": final_hs,
-        "ETH Total": total_eth
+        "Total ETH": total_eth,
+        "Loop2 USDC": loop2_usdc,
+        "Liquidation Price": liq_price,
+        "Pct Gain": pct_gain
     })
 
-# Build pivot table
 df = pd.DataFrame(data)
-pivot_hs = df.pivot(index="Second LTV", columns="Final Health Score", values="Final Health Score")
 
-# Diagnostic check
-if pivot_hs.isnull().values.any() or np.isinf(pivot_hs.values).any():
-    st.error("❌ NaN or Inf found in data.")
-    st.dataframe(pivot_hs)
-else:
-    st.success("✅ Data is clean. Rendering with imshow...")
+# Plotly heatmap
+fig = px.density_heatmap(
+    df,
+    x="Final Health Score",
+    y="Second LTV",
+    z="Total ETH",
+    color_continuous_scale="RdYlGn",
+    labels={"Total ETH": "ETH Total"},
+    title="ETH Leverage Setups by Final Health Score and Second Loop LTV"
+)
 
-    # Plot using imshow (no matplotlib text rendering)
-    fig, ax = plt.subplots(figsize=(12, 12))
-    ax.imshow(pivot_hs.values, aspect='auto', cmap='RdYlGn')
-    ax.set_xticks([])  # remove all axis text
-    ax.set_yticks([])
-    st.pyplot(fig)
+fig.update_layout(
+    xaxis_title="Final Health Score",
+    yaxis_title="Second LTV (%)",
+    coloraxis_colorbar=dict(title="Total ETH"),
+    autosize=True
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
-st.markdown("**This fallback uses imshow to bypass matplotlib's mathtext and font rendering system.**")
+st.markdown("**This version uses Plotly to ensure full compatibility with Streamlit and avoid matplotlib errors.**")
