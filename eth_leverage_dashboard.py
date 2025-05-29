@@ -12,33 +12,21 @@ st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allo
 
 st.title("ETH Leverage Heatmap")
 
-# Reset Button
-if st.button("🔄 Reset to Defaults"):
-    st.rerun()
-    # Session state defaults
+# Session state defaults
 if "eth_stack" not in st.session_state:
     st.session_state.eth_stack = 6.73
 if "eth_price" not in st.session_state:
     st.session_state.eth_price = 2660
 
-# User Inputs with Sliders
-eth_stack = st.slider(
-    "Current ETH Stack", 
-    min_value=1.0, 
-    max_value=50.0, 
-    value=st.session_state.eth_stack, 
-    step=0.01, 
-    key="eth_stack"
-)
+# Reset Button
+if st.button("🔄 Reset to Defaults"):
+    st.session_state.eth_stack = 6.73
+    st.session_state.eth_price = 2660
+    st.rerun()
 
-eth_price = st.slider(
-    "Current ETH Price ($)", 
-    min_value=500, 
-    max_value=10000, 
-    value=st.session_state.eth_price, 
-    step=10, 
-    key="eth_price"
-)
+# User Inputs with Sliders
+eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=st.session_state.eth_stack, step=0.01, key="eth_stack")
+eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=st.session_state.eth_price, step=10, key="eth_price")
 
 # Simulate LP Exit and Top-Up Panel
 st.markdown("### LP Exit Simulation")
@@ -46,12 +34,12 @@ eth_from_lp = st.number_input("ETH Gained from LP", min_value=0.0, value=0.0, st
 eth_stack += eth_from_lp
 st.markdown(f"**Updated ETH Stack after LP Exit:** {eth_stack:.2f} ETH")
 
-# Aave Health Indicator (based on 45% base LTV for illustration)
-base_ltv = 0.45
+# Aave Health Indicator (based on 40% base LTV for illustration)
+base_ltv = 0.40
 collateral_value = eth_stack * eth_price
 debt_value = collateral_value * base_ltv
 health_score = collateral_value / debt_value if debt_value else 0
-st.markdown(f"### 🛡️ Estimated Aave Health Score: **{health_score:.2f}** (based on 45% LTV)")
+st.markdown(f"### 🛡️ Estimated Aave Health Score: **{health_score:.2f}** (based on 40% LTV)")
 
 first_loop_lvts = np.arange(40.0, 52.5, 2.5)
 second_loop_lvts = np.arange(30.0, 52.5, 2.5)
@@ -66,13 +54,24 @@ for s_ltv in second_loop_lvts:
         pct_gain = ((total_eth / eth_stack) - 1) * 100
         liq_drop = round((1 - (1 / final_hs)) * 100)  # approximate
         liq_price = round(eth_price * (1 - liq_drop / 100))
-        label = f"{final_hs:.2f}\n${loop2_usdc}\n\u2193{liq_drop}% @ ${liq_price}\n{total_eth:.2f} ETH (+{int(pct_gain)}%)"
         data.append({
             "Second LTV": s_ltv,
             "First LTV": f_ltv,
             "Final Health Score": final_hs,
-            "Label": label
+            "Loop 2 USDC": loop2_usdc,
+            "Total ETH": total_eth,
+            "Label Base": f"{final_hs:.2f}\n${loop2_usdc}\n\u2193{liq_drop}% @ ${liq_price}\n{total_eth:.2f} ETH (+{int(pct_gain)}%)"
         })
+
+# Identify Top 10 combinations by Total ETH
+sorted_data = sorted(data, key=lambda x: x["Total ETH"], reverse=True)
+top_labels = { (d["First LTV"], d["Second LTV"]): rank+1 for rank, d in enumerate(sorted_data[:10]) }
+
+# Add ranks to labels
+for entry in data:
+    key = (entry["First LTV"], entry["Second LTV"])
+    rank_label = f"\n#{top_labels[key]}" if key in top_labels else ""
+    entry["Label"] = entry["Label Base"] + rank_label
 
 # Build DataFrame
 heatmap_df = pd.DataFrame(data)
