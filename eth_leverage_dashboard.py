@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+mpl.rcParams['text.usetex'] = False
+mpl.rcParams['mathtext.default'] = 'none'
 
 # Page config
 st.set_page_config(page_title="ETH Leverage Strategy Dashboard", layout="wide")
