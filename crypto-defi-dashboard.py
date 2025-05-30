@@ -61,4 +61,4 @@ for ltv2 in ltv2_range:
     })
 
 results_df = pd.DataFrame(data)
-st.dataframe(results_df, use_container_width=True)
+st.dataframe(results_df, use_container_width=True, hide_index=True)
