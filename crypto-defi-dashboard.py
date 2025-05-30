@@ -1,24 +1,20 @@
-# ETH Leverage LP Strategy Dashboard
-# This version preserves all previous features and prepares for additional volatility overlays and trade management tools.
-
 import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import yfinance as yf
-from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ETH Leverage Loop Simulator", layout="wide")
 st.title("ETH Leverage Loop Simulator")
 
-# === Step 1: Real-time ETH price ===
+# --- Fetch ETH Price ---
 def fetch_eth_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
         return r.json()["ethereum"]["usd"]
     except:
-        return 2600.00
+        return 2600.00  # fallback price
 
 if "eth_price" not in st.session_state:
     st.session_state.eth_price = fetch_eth_price()
@@ -29,97 +25,112 @@ if st.button("Refresh ETH Price from CoinGecko"):
 eth_price = st.session_state.eth_price
 st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 
-# === Step 2: Configure Loop 1 ===
+# --- Lock/Unlock Mechanism ---
+if "lock_settings" not in st.session_state:
+    st.session_state.lock_settings = False
+
 st.header("Step 2: Configure Loop 1")
-initial_collateral_eth = st.number_input("Initial ETH Collateral", value=6.73, step=0.01)
-ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=10, max_value=58, value=30)
-expected_lp_days = st.slider("Expected LP Duration (Days)", min_value=1, max_value=30, value=7)
 
-# --- Lock logic ---
-if "loop1_locked" not in st.session_state:
-    st.session_state.loop1_locked = False
-if "locked_ltv1" not in st.session_state:
-    st.session_state.locked_ltv1 = ltv1
-if st.button("Lock Loop 1 Settings"):
-    st.session_state.loop1_locked = True
-    st.session_state.locked_ltv1 = ltv1
-if st.button("Unlock Loop 1 Settings"):
-    st.session_state.loop1_locked = False
+col1, col2 = st.columns(2)
+with col1:
+    if not st.session_state.lock_settings:
+        initial_collateral_eth = st.number_input("Initial ETH Collateral", value=6.73, step=0.01, key="initial_eth")
+    else:
+        st.markdown(f"**Initial ETH Collateral:** {st.session_state.initial_eth}")
+with col2:
+    if not st.session_state.lock_settings:
+        ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=10, max_value=58, value=30, key="ltv1")
+    else:
+        st.markdown(f"**Loop 1 LTV:** {st.session_state.ltv1}")
 
-if st.session_state.loop1_locked:
-    ltv1 = st.session_state.locked_ltv1
-    st.markdown(f"**Loop 1 LTV is Locked at:** {ltv1}%")
+expected_lp_days = st.slider("Expected LP Duration (Days)", 1, 30, 7)
 
-# --- Loop 1 Calculations ---
-collateral_value_usd = initial_collateral_eth * eth_price
-loop1_debt = collateral_value_usd * ltv1 / 100
-eth_gained = loop1_debt / eth_price
-eth_stack_after_loop1 = initial_collateral_eth + eth_gained
-new_collateral_usd = eth_stack_after_loop1 * eth_price
-loop1_health_score = (new_collateral_usd * 0.80) / loop1_debt
-loop1_liquidation_price = (loop1_debt / eth_stack_after_loop1) / 0.80
-loop1_pct_to_liquidation = 1 - (loop1_liquidation_price / eth_price)
+col3, col4 = st.columns(2)
+with col3:
+    if st.button("Lock Loop 1 Settings"):
+        st.session_state.lock_settings = True
+        st.session_state.initial_eth = initial_collateral_eth
+        st.session_state.ltv1 = ltv1
+with col4:
+    if st.button("Unlock Loop 1 Settings"):
+        st.session_state.lock_settings = False
 
-# === Volatility ===
+# --- Loop 1 Calculation ---
+initial_eth = st.session_state.get("initial_eth", 6.73)
+ltv1 = st.session_state.get("ltv1", 30)
+collateral_usd = initial_eth * eth_price
+debt_usd = collateral_usd * ltv1 / 100
+eth_gained = debt_usd / eth_price
+total_eth = initial_eth + eth_gained
+total_collateral_usd = total_eth * eth_price
+health_score = (total_collateral_usd * 0.80) / debt_usd
+liq_price = (debt_usd / total_eth) / 0.80
+pct_to_liq = 1 - (liq_price / eth_price)
+
+# --- Volatility ---
 def get_eth_volatility(days):
-    end = datetime.now()
-    start = end - timedelta(days=90)
-    df = yf.download("ETH-USD", start=start, end=end)
-    df = df.dropna()
-    df['returns'] = df['Adj Close'].pct_change()
-    df['vol'] = df['returns'].rolling(window=days).std() * np.sqrt(365)
-    return df
+    df = yf.download("ETH-USD", period="90d", interval="1d")
+    if 'Adj Close' in df.columns:
+        df['returns'] = df['Adj Close'].pct_change()
+        price_series = df['Adj Close']
+    else:
+        df['returns'] = df['Close'].pct_change()
+        price_series = df['Close']
+    rolling_std = df['returns'].rolling(window=days).std()
+    vol_annualized = rolling_std.iloc[-1] * np.sqrt(365)
+    return vol_annualized, df, price_series, rolling_std
 
-df_vol = get_eth_volatility(expected_lp_days)
-latest_vol = df_vol['vol'].iloc[-1] * 100
+vol, hist_df, price_series, rolling_std = get_eth_volatility(expected_lp_days)
+vol_pct = vol * 100
 
-if latest_vol < 20:
-    regime = "Low"
-elif latest_vol < 40:
-    regime = "Medium"
-else:
-    regime = "High"
+def categorize_vol(v):
+    if v < 20:
+        return "Low"
+    elif v < 40:
+        return "Moderate"
+    else:
+        return "High"
 
-# === Loop 1 Summary ===
+# --- Loop 1 Summary ---
 st.subheader("Loop 1 Summary")
-st.markdown(f"- **Debt After Loop 1:** ${loop1_debt:,.2f}")
+st.markdown(f"- **Debt After Loop 1:** ${debt_usd:,.2f}")
 st.markdown(f"- **ETH Gained After Loop 1:** {eth_gained:.2f}")
-st.markdown(f"- **ETH Stack After Loop 1:** {eth_stack_after_loop1:.2f}")
-st.markdown(f"- **New Collateral After Loop 1:** ${new_collateral_usd:,.2f}")
-st.markdown(f"- **Loop 1 Health Score:** {loop1_health_score:.2f}")
-st.markdown(f"- **Loop 1 % to Liquidation:** {loop1_pct_to_liquidation:.1%}")
-st.markdown(f"- **Loop 1 Liquidation Price:** ${loop1_liquidation_price:,.2f}")
-st.markdown(f"- **Est. Annualized Volatility ({expected_lp_days}D Lookback):** {latest_vol:.2f}%")
-st.markdown(f"- **Market Behavior:** {regime}")
+st.markdown(f"- **ETH Stack After Loop 1:** {total_eth:.2f}")
+st.markdown(f"- **New Collateral After Loop 1:** ${total_collateral_usd:,.2f}")
+st.markdown(f"- **Loop 1 Health Score:** {health_score:.2f}")
+st.markdown(f"- **Loop 1 % to Liquidation:** {pct_to_liq:.1%}")
+st.markdown(f"- **Loop 1 Liquidation Price:** ${liq_price:,.2f}")
+st.markdown(f"- **Est. Annualized Volatility ({expected_lp_days}D Lookback):** {vol_pct:.2f}%")
+st.markdown(f"- **Market Behavior:** {categorize_vol(vol_pct)}")
 
-# === Volatility Chart ===
+# --- Volatility Chart ---
 st.subheader("Volatility Trend")
-fig, ax1 = plt.subplots(figsize=(9, 4))
-ax1.plot(df_vol.index, df_vol['Adj Close'], color='blue', label='ETH Price ($)')
+fig, ax1 = plt.subplots(figsize=(10, 4))
+ax1.plot(price_series.index, price_series, color='blue', label='ETH Price ($)')
 ax1.set_ylabel("ETH Price ($)", color='blue')
-
 ax2 = ax1.twinx()
-ax2.plot(df_vol.index, df_vol['vol'] * 100, color='red', label='Volatility (%)')
+ax2.plot(rolling_std.index, rolling_std * 100 * np.sqrt(365), color='red', label='Annualized Volatility (%)')
 ax2.set_ylabel("Annualized Volatility (%)", color='red')
+fig.tight_layout()
 st.pyplot(fig)
 
-# === Step 3: Loop 2 Evaluation ===
+# --- Loop 2 Simulation ---
 st.header("Step 3: Loop 2 Evaluation")
-ltv2_range = range(10, 30)
-loop2_data = []
 
-for ltv2 in ltv2_range:
-    usdc_loan2 = new_collateral_usd * ltv2 / 100
-    total_debt = loop1_debt + usdc_loan2
-    hf2 = (new_collateral_usd * 0.80) / total_debt
-    price_at_liq = total_debt / (eth_stack_after_loop1 * 0.80)
-    pct_to_liq = 1 - (price_at_liq / eth_price)
+loop2_data = []
+for ltv2 in range(10, 50):
+    loan2 = total_collateral_usd * ltv2 / 100
+    total_debt = debt_usd + loan2
+    hf = (total_collateral_usd * 0.80) / total_debt
+    liq_price = total_debt / (total_eth * 0.80)
+    pct_to_liq = 1 - (liq_price / eth_price)
     loop2_data.append({
         "LTV (%)": ltv2,
-        "Health Score": round(hf2, 2),
-        "Loan Amount ($)": f"${usdc_loan2:,.2f}",
+        "Health Score": round(hf, 2),
+        "Loan Amount ($)": f"${loan2:,.2f}",
         "% to Liquidation": f"{pct_to_liq:.1%}",
-        "ETH Price at Liquidation": f"${price_at_liq:,.2f}"
+        "ETH Price at Liquidation": f"${liq_price:,.2f}"
     })
 
-st.dataframe(pd.DataFrame(loop2_data), use_container_width=True)
+df = pd.DataFrame(loop2_data)
+st.dataframe(df, use_container_width=True)
