@@ -1,4 +1,4 @@
-# LP Exit Planner - Re-enabling LP URL Input for Delegated Positions
+# LP Exit Planner - Fixed Uniswap URL Parsing for v3 and v4
 import streamlit as st
 import pandas as pd
 import requests
@@ -77,8 +77,8 @@ if wallet_address and moralis_key:
         use_live_eth = st.checkbox("Use live ETH balance to auto-fill stack", value=False)
 
 position_id = None
-if "uniswap.org/positions/v3" in lp_url:
-    match = re.search(r"uniswap.org/positions/v3/([^/]+)/([0-9]+)", lp_url)
+if "uniswap.org/positions/" in lp_url:
+    match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
     if match:
         network_from_url = match.group(1).lower()
         position_id = match.group(2)
