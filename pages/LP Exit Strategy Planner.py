@@ -11,7 +11,7 @@ SUBGRAPH_URLS = {
     "arbitrum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3-arbitrum"
 }
 
-# ✅ Use raw string ID (no hex conversion)
+# ✅ Raw string ID (not hex)
 def convert_to_hex_position_id(position_id):
     return str(position_id)
 
@@ -63,7 +63,7 @@ st.subheader("🔗 LP Live Data Integration (Optional)")
 lp_url = st.text_input("Paste Uniswap LP Position URL")
 moralis_key = st.text_input("Paste your Moralis API Key", type="password")
 wallet_address = st.text_input("Wallet Address (optional for ETH tracking)")
-network = st.selectbox("Network", ["ethereum", "arbitrum"], index=1)
+manual_network = st.selectbox("Network", ["ethereum", "arbitrum"], index=1)
 
 # --- Live ETH (Optional) ---
 use_live_eth = False
@@ -82,7 +82,8 @@ if match:
     network_from_url = match.group(1).lower()
     position_id = match.group(2)
     position_id_str = convert_to_hex_position_id(position_id)
-    data = fetch_position_by_id(position_id_str, network_from_url)
+    selected_network = network_from_url if network_from_url in SUBGRAPH_URLS else manual_network
+    data = fetch_position_by_id(position_id_str, selected_network)
     pos = data.get("data", {}).get("position")
     if pos:
         token0 = pos["pool"]["token0"]["symbol"]
@@ -102,14 +103,14 @@ fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, ste
 loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.0, step=50.0)
 eth_stack = eth_live if use_live_eth and eth_live else st.number_input("Current ETH Stack", value=8.75, step=0.01)
 
-# --- Price Scenario ---
+# --- Price Simulation ---
 st.subheader("Price Scenario Simulation")
 eth_scenario_price = st.slider("Simulate ETH Price ($)", 1000, 5000, int(current_price), step=50)
 collateral_usd = eth_stack * eth_scenario_price
 repayable_eth = loop2_debt_usd / eth_scenario_price
 net_eth = fees_earned_eth - repayable_eth
 
-# --- Range Status ---
+# --- Range Check ---
 if current_price > lp_high:
     status = "above"
 elif current_price < lp_low:
