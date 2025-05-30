@@ -1,11 +1,11 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import requests
 import re
 
 st.header("Step 4: LP Exit Planner")
 
-# Authenticated subgraph URL builder
+# ✅ Authenticated subgraph URL builder
 def get_arbitrum_subgraph_url(api_key):
     return f"https://gateway.thegraph.com/api/{api_key}/subgraphs/name/uniswap/uniswap-v3-arbitrum"
 
@@ -20,14 +20,17 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
             st.error("Arbitrum requires a valid Graph API key.")
             return None
         url = get_arbitrum_subgraph_url(api_key)
+        headers = {
+            "Content-Type": "application/json"
+        }
     else:
         url = SUBGRAPH_URLS[network]
+        headers = {"Content-Type": "application/json"}
 
-    headers = {"Content-Type": "application/json"}
     query = {
         "query": f"""
         {{
-          position(id: \"{position_id_str}\") {{
+          position(id: "{position_id_str}") {{
             id
             liquidity
             depositedToken0
@@ -48,7 +51,18 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
 
     try:
         response = requests.post(url, headers=headers, json=query)
-        return response.json()
+        if response.status_code != 200:
+            return {"ERROR": {
+                "message": f"Non-200 response: {response.status_code}",
+                "body": response.text
+            }}
+        try:
+            return response.json()
+        except ValueError:
+            return {"ERROR": {
+                "message": "Response not valid JSON",
+                "body": response.text
+            }}
     except Exception as e:
         return {"ERROR": {"message": str(e)}}
 
@@ -61,6 +75,7 @@ def get_eth_balance(wallet_address, moralis_api_key):
     r = requests.get(url, headers=headers)
     return int(r.json()["balance"]) / 1e18 if r.status_code == 200 else None
 
+# --- ETH Price ---
 if "eth_price" not in st.session_state:
     try:
         price_data = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").json()
@@ -70,13 +85,15 @@ if "eth_price" not in st.session_state:
 
 current_price = st.session_state.eth_price
 
-st.subheader("\U0001F517 LP Live Data Integration (Optional)")
+# --- UI ---
+st.subheader("🔗 LP Live Data Integration (Optional)")
 lp_url = st.text_input("Paste Uniswap LP Position URL")
 graph_key = st.text_input("Paste your Graph API Key (for Arbitrum)", type="password")
 moralis_key = st.text_input("Paste your Moralis API Key (for ETH tracking)", type="password")
 wallet_address = st.text_input("Wallet Address (optional for ETH tracking)")
 manual_network = st.selectbox("Network", ["ethereum", "arbitrum"], index=1)
 
+# --- Live ETH (Optional) ---
 use_live_eth = False
 eth_live = None
 if wallet_address and moralis_key:
@@ -85,6 +102,7 @@ if wallet_address and moralis_key:
         st.success(f"Live ETH Balance: {eth_live:.4f} ETH")
         use_live_eth = st.checkbox("Use live ETH balance to auto-fill stack", value=False)
 
+# --- LP Range Defaults ---
 lp_low = 2300.0
 lp_high = 2500.0
 match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
@@ -94,7 +112,7 @@ if match:
     position_id_str = str(position_id)
     selected_network = network_from_url if network_from_url in ["ethereum", "arbitrum"] else manual_network
     response = fetch_position_by_id(position_id_str, selected_network, api_key=graph_key)
-    pos = response.get("data", {}).get("position") if response else None
+    pos = response.get("data", {}).get("position") if response and "data" in response else None
     if pos:
         token0 = pos["pool"]["token0"]["symbol"]
         token1 = pos["pool"]["token1"]["symbol"]
@@ -105,20 +123,23 @@ if match:
         st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
     else:
         st.warning("LP position not found or failed to fetch.")
-        st.json(response)
+        st.write(response)
 
+# --- Inputs ---
 lp_low = st.number_input("Your LP Lower Bound ($)", value=lp_low)
 lp_high = st.number_input("Your LP Upper Bound ($)", value=lp_high)
 fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
 loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.0, step=50.0)
 eth_stack = eth_live if use_live_eth and eth_live else st.number_input("Current ETH Stack", value=8.75, step=0.01)
 
+# --- Price Simulation ---
 st.subheader("Price Scenario Simulation")
 eth_scenario_price = st.slider("Simulate ETH Price ($)", 1000, 5000, int(current_price), step=50)
 collateral_usd = eth_stack * eth_scenario_price
 repayable_eth = loop2_debt_usd / eth_scenario_price
 net_eth = fees_earned_eth - repayable_eth
 
+# --- Range Check ---
 if current_price > lp_high:
     status = "above"
 elif current_price < lp_low:
@@ -126,14 +147,15 @@ elif current_price < lp_low:
 else:
     status = "in"
 
+# --- Guidance ---
 st.subheader("Guidance")
 if status == "in":
-    st.success("\u2705 Your LP is currently in range. Let it continue accumulating fees.")
+    st.success("✅ Your LP is currently in range. Let it continue accumulating fees.")
 elif status == "above":
     st.markdown(f"Price is **{(current_price - lp_high)/lp_high:.1%} above** your LP range.")
     st.markdown(f"You've earned **{fees_earned_eth:.2f} ETH** in fees.")
     st.markdown(f"Loop 2 debt = **${loop2_debt_usd:,.2f}** = **{repayable_eth:.2f} ETH** at **${eth_scenario_price}**.")
-    st.warning(f"\u26a0\ufe0f You are short **{abs(net_eth):.2f} ETH** to repay Loop 2.")
+    st.warning(f"⚠️ You are short **{abs(net_eth):.2f} ETH** to repay Loop 2.")
 elif status == "below":
     needed = loop2_debt_usd / eth_scenario_price
     if needed <= eth_stack:
@@ -142,6 +164,7 @@ elif status == "below":
         recovery_price = loop2_debt_usd / eth_stack
         st.error(f"You need ETH to reach **${recovery_price:,.2f}** to repay Loop 2.")
 
+# --- Summary Table ---
 st.subheader("P&L Summary")
 st.dataframe(pd.DataFrame({
     "Scenario Price ($)": [eth_scenario_price],
