@@ -10,16 +10,27 @@ st.set_page_config(page_title="ETH Leverage Heatmap", layout="wide")
 
 st.title("ETH Leverage Heatmap")
 
-# Session state setup for reset
-if "eth_stack" not in st.session_state:
-    st.session_state.eth_stack = 6.73
-    st.session_state.eth_price_input = 2660
-    st.session_state.eth_gained = 0.0
+# Session state setup for reset and manual loop 1
+for key, default in {
+    "eth_stack": 6.73,
+    "eth_price_input": 2660,
+    "eth_gained": 0.0,
+    "loop1_eth": 10.4,
+    "loop1_debt": 11200
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
-if st.button("🔁 Reset to Defaults"):
-    st.session_state.eth_stack = 6.73
-    st.session_state.eth_price_input = 2660
-    st.session_state.eth_gained = 0.0
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("🔁 Reset App (keep Loop 1)"):
+        st.session_state.eth_stack = 6.73
+        st.session_state.eth_price_input = 2660
+        st.session_state.eth_gained = 0.0
+with col2:
+    if st.button("❌ Reset Loop 1 Inputs"):
+        st.session_state.loop1_eth = 10.4
+        st.session_state.loop1_debt = 11200
 
 # Try to fetch real-time ETH price
 eth_price_default = 2660
@@ -42,8 +53,15 @@ else:
 eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=st.session_state.eth_stack, step=0.01)
 st.session_state.eth_stack = eth_stack
 
-# Estimated Aave health score
-st.markdown(f"### Estimated Aave Health Score: {(eth_stack * eth_price * 0.8) / (eth_stack * eth_price * 0.4):.2f} (based on 40% LTV)")
+# Loop 1 setup
+st.markdown("### Manual Loop 1 Setup")
+loop1_eth = st.number_input("ETH Stack After Loop 1", min_value=0.0, value=st.session_state.loop1_eth, step=0.01)
+loop1_debt = st.number_input("Debt After Loop 1 ($)", min_value=0.0, value=st.session_state.loop1_debt, step=10.0)
+st.session_state.loop1_eth = loop1_eth
+st.session_state.loop1_debt = loop1_debt
+
+loop1_health = (loop1_eth * eth_price * 0.8) / loop1_debt if loop1_debt > 0 else 0
+st.markdown(f"**Loop 1 Health Score: {loop1_health:.2f}**")
 
 # LP Exit Simulator
 st.markdown("### LP Exit Simulation")
@@ -52,34 +70,30 @@ st.session_state.eth_gained = eth_gained
 updated_eth_stack = eth_stack + eth_gained
 st.markdown(f"**Updated ETH Stack after LP Exit: {updated_eth_stack:.2f} ETH**")
 
-# Grid definitions (fixed Loop 1 at 40%)
-first_loop_ltv = 40.0
-second_loop_lvts = np.arange(30.0, 52.0, 1.0)  # more granular loop 2 range
+# Grid definitions (loop1 fixed from input)
+first_loop_eth = loop1_eth
+first_loop_debt = loop1_debt
+first_loop_collateral = first_loop_eth * eth_price
+second_loop_lvts = np.arange(30.0, 52.0, 1.0)
 
 # Simulate combinations
 data = []
 for s_ltv in second_loop_lvts:
-    loop1_debt = eth_stack * eth_price * (first_loop_ltv / 100)
-    eth_bought_1 = loop1_debt / eth_price
-    new_eth_1 = eth_stack + eth_bought_1
-    collateral_after_loop1 = new_eth_1 * eth_price
-    hs_loop1 = (collateral_after_loop1 * 0.8) / loop1_debt
-
-    loop2_debt = collateral_after_loop1 * (s_ltv / 100)
+    loop2_debt = first_loop_collateral * (s_ltv / 100)
     eth_bought_2 = loop2_debt / eth_price
-    total_eth = new_eth_1 + eth_bought_2
+    total_eth = first_loop_eth + eth_bought_2
     total_collateral = total_eth * eth_price
-    total_debt = loop1_debt + loop2_debt
-    final_hs = (total_collateral * 0.8) / total_debt
+    total_debt = first_loop_debt + loop2_debt
+    final_hs = (total_collateral * 0.8) / total_debt if total_debt > 0 else 0
 
-    liq_price = round((total_debt / (total_eth * 0.8)), 2)
-    liq_drop_pct = round((1 - (liq_price / eth_price)) * 100)
+    liq_price = round((total_debt / (total_eth * 0.8)), 2) if total_eth > 0 else 0
+    liq_drop_pct = round((1 - (liq_price / eth_price)) * 100) if eth_price > 0 else 0
 
-    pct_gain = ((total_eth / eth_stack) - 1) * 100
+    pct_gain = ((total_eth / eth_stack) - 1) * 100 if eth_stack > 0 else 0
 
     data.append({
         "Second LTV": s_ltv,
-        "First LTV": first_loop_ltv,
+        "First LTV": "Input",
         "Final Health Score": final_hs,
         "Loop 2 Debt": int(loop2_debt),
         "Liq Price": liq_price,
@@ -124,7 +138,7 @@ heatmap_df["Label"] = heatmap_df.apply(
 pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
 pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
 
-fig, ax = plt.subplots(figsize=(6, 14))  # narrow width, taller layout
+fig, ax = plt.subplots(figsize=(6, 14))
 sns.heatmap(
     pivot_hs,
     annot=pivot_labels,
@@ -139,4 +153,4 @@ plt.xlabel("First Loop LTV (%)")
 plt.ylabel("Second Loop LTV (%)")
 st.pyplot(fig)
 
-st.markdown("**Instructions:** First loop is fixed at 40%. Explore granular Loop 2 options with a minimum health score of 1.6.")
+st.markdown("**Instructions:** Loop 1 is now manually set. Explore granular Loop 2 options with a minimum health score of 1.6.")
