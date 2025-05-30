@@ -101,12 +101,21 @@ for s_ltv in second_loop_lvts:
 heatmap_df = pd.DataFrame(data)
 heatmap_df = heatmap_df[heatmap_df["Final Health Score"] >= 1.6].copy()
 
-heatmap_df["Score"] = (
-    heatmap_df["Final Health Score"] * 40 +
-    heatmap_df["Liq Drop %"] * 0.4 +
-    heatmap_df["ETH Gain %"] * 0.2 +
-    heatmap_df["Loop 2 Debt"] * 0.015
+# Drop any rows that are incomplete
+heatmap_df = heatmap_df.dropna()
+
+# Apply formatted label
+heatmap_df["Label"] = heatmap_df.apply(
+    lambda row: (
+        f"{strip_zero(row['Final Health Score'])}\n"
+        f"${row['Loop 2 Debt']}\n"
+        f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
+        f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
+        f"#{int(row['Rank'])}"
+    ),
+    axis=1
 )
+
 heatmap_df = heatmap_df.sort_values("Score", ascending=False).copy()
 heatmap_df["Rank"] = range(1, len(heatmap_df) + 1)
 
