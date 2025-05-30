@@ -44,33 +44,18 @@ for ltv2 in LOOP2_LTV_RANGE:
 
     results.append({
         "LTV Loop 2 (%)": ltv2,
-        "USDC Loan": loop2_debt,
+        "USDC Loan": f"${loop2_debt:,.2f}",
         "Health Score": round(health_score, 2),
-        "% to Liquidation": pct_to_liquidation,
-        "Price at Liquidation": liquidation_price
+        "% to Liquidation": f"{pct_to_liquidation:.1f}%",
+        "Price at Liquidation": f"${liquidation_price:,.2f}"
     })
 
 df = pd.DataFrame(results)
 df["Rank"] = df["Health Score"].rank(ascending=False).astype(int)
 
-# --- Interactive Sort/Filter Controls ---
-st.markdown("### Sort & Filter Table")
-sort_col = st.selectbox("Sort by", df.columns, index=2)
-sort_order = st.radio("Order", ["Descending", "Ascending"], horizontal=True)
-min_health = st.slider("Minimum Health Score", 1.0, 5.0, 1.6, 0.1)
+# Reorder columns
+df = df[["LTV Loop 2 (%)", "USDC Loan", "Health Score", "% to Liquidation", "Price at Liquidation", "Rank"]]
 
-# --- Apply Filters/Sorting ---
-filtered_df = df[df["Health Score"] >= min_health]
-filtered_df = filtered_df.sort_values(by=sort_col, ascending=(sort_order == "Ascending"))
-
-# --- Format Columns ---
-filtered_df["USDC Loan"] = filtered_df["USDC Loan"].apply(lambda x: f"${x:,.2f}")
-filtered_df["% to Liquidation"] = filtered_df["% to Liquidation"].apply(lambda x: f"{x:.1f}%")
-filtered_df["Price at Liquidation"] = filtered_df["Price at Liquidation"].apply(lambda x: f"${x:,.2f}")
-
-# --- Reorder Columns ---
-filtered_df = filtered_df[["LTV Loop 2 (%)", "USDC Loan", "Health Score", "% to Liquidation", "Price at Liquidation", "Rank"]]
-
-# --- Display Full Table (No Scrollbars) ---
-st.markdown("### Loop 2 Results")
-st.table(filtered_df)
+# --- Display Table with Interactive Sorting & Filtering ---
+st.markdown("### Loop 2 Results (Sortable/Filterable)")
+st.data_editor(df, use_container_width=True, hide_index=True, disabled=True)
