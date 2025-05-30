@@ -99,13 +99,15 @@ for s_ltv in second_loop_lvts:
 heatmap_df = pd.DataFrame(data)
 heatmap_df = heatmap_df[heatmap_df["Final Health Score"] >= 1.6].copy()
 
-# Calculate Score and Rank
+# Score calculation
 heatmap_df["Score"] = (
     heatmap_df["Final Health Score"] * 40 +
     heatmap_df["Liq Drop %"] * 0.4 +
     heatmap_df["ETH Gain %"] * 0.2 +
     heatmap_df["Loop 2 Debt"] * 0.015
 )
+
+# Sort and rank
 heatmap_df = heatmap_df.sort_values("Score", ascending=False).copy()
 heatmap_df["Rank"] = range(1, len(heatmap_df) + 1)
 
