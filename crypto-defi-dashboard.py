@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import requests
 
 st.set_page_config(layout="wide")
@@ -13,7 +11,7 @@ st.title("ETH Leverage Loop Simulator")
 if "eth_price" not in st.session_state:
     st.session_state.eth_price = None
 
-# Function to fetch ETH price
+# Fetch live ETH price
 def fetch_eth_price():
     try:
         response = requests.get(
@@ -26,24 +24,22 @@ def fetch_eth_price():
     except Exception:
         return None
 
-# ETH Price logic
+# Step 1: ETH Price Input
 st.header("Step 1: ETH Price")
-refresh_price = st.button("Refresh ETH Price from CoinGecko")
-if refresh_price or st.session_state.eth_price is None:
-    live_price = fetch_eth_price()
-    if live_price:
-        st.session_state.eth_price = live_price
+if st.button("Refresh ETH Price from CoinGecko") or st.session_state.eth_price is None:
+    price = fetch_eth_price()
+    if price:
+        st.session_state.eth_price = price
 
 if st.session_state.eth_price:
-    st.markdown(f"**Real-Time ETH Price:** ${st.session_state.eth_price:,.2f}")
     eth_price = st.session_state.eth_price
+    st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 else:
     eth_price = st.number_input("Enter ETH Price ($)", min_value=0.0, value=3000.0, step=1.0)
     st.session_state.eth_price = eth_price
 
-# Loop 1 Setup
+# Step 2: Loop 1 Configuration
 st.header("Step 2: Configure Loop 1")
-
 eth_collateral = st.number_input("Initial ETH Collateral", min_value=0.0, value=6.73, step=0.01)
 loop1_ltv = st.slider("Loop 1 Borrow LTV (%)", min_value=10, max_value=50, value=40, step=1)
 
@@ -58,7 +54,7 @@ st.markdown(f"- **ETH Gained After Loop 1:** {eth_gained_loop1:.2f}")
 st.markdown(f"- **ETH Stack After Loop 1:** {eth_stack:.2f}")
 st.markdown(f"- **Loop 1 Health Score:** {loop1_health:.2f}")
 
-# Loop 2 Simulation
+# Step 3: Loop 2 Evaluation
 st.header("Step 3: Loop 2 Evaluation")
 
 results = []
@@ -78,10 +74,21 @@ for loop2_ltv in range(30, 51):
             "ETH Price at Liquidation": f"${liquidation_price:,.2f}"
         })
 
-# Display Table
+# Display interactive table
 if results:
     df = pd.DataFrame(results)
-    df = df.sort_values(by="Health Score", ascending=False).reset_index(drop=True)
-    st.dataframe(df, use_container_width=True)
+    st.data_editor(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "LTV (%)": st.column_config.NumberColumn("LTV (%)", width="small"),
+            "Health Score": st.column_config.NumberColumn("Health Score", width="small"),
+            "Loan Amount ($)": st.column_config.TextColumn("Loan Amount ($)", width="medium"),
+            "% to Liquidation": st.column_config.TextColumn("% to Liquidation", width="medium"),
+            "ETH Price at Liquidation": st.column_config.TextColumn("ETH Price at Liquidation", width="medium"),
+        },
+        num_rows="fixed"
+    )
 else:
     st.warning("No Loop 2 options meet the 1.6 health score requirement. Try adjusting Loop 1 LTV.")
