@@ -1,4 +1,3 @@
-# LP Exit Planner - Updated with v3/v4 URL support and working Arbitrum subgraph
 import streamlit as st
 import pandas as pd
 import requests
@@ -6,7 +5,7 @@ import re
 
 st.header("Step 4: LP Exit Planner")
 
-# ✅ Updated subgraph URLs
+# ✅ FIXED: Official Uniswap subgraph for Arbitrum
 SUBGRAPH_URLS = {
     "ethereum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
     "arbitrum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3-arbitrum"
@@ -49,7 +48,7 @@ def get_eth_balance(wallet_address, moralis_api_key):
     r = requests.get(url, headers=headers)
     return int(r.json()["balance"]) / 1e18 if r.status_code == 200 else None
 
-# ETH price fetch
+# Fetch ETH price once
 if "eth_price" not in st.session_state:
     try:
         price_data = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").json()
@@ -59,14 +58,14 @@ if "eth_price" not in st.session_state:
 
 current_price = st.session_state.eth_price
 
-# UI Input
+# --- LP Data Inputs ---
 st.subheader("🔗 LP Live Data Integration (Optional)")
 lp_url = st.text_input("Paste Uniswap LP Position URL")
 moralis_key = st.text_input("Paste your Moralis API Key", type="password")
 wallet_address = st.text_input("Wallet Address (optional for ETH tracking)")
 network = st.selectbox("Network", ["ethereum", "arbitrum"], index=1)
 
-# Live ETH Tracking
+# --- ETH Balance Live Fill ---
 use_live_eth = False
 eth_live = None
 if wallet_address and moralis_key:
@@ -75,7 +74,7 @@ if wallet_address and moralis_key:
         st.success(f"Live ETH Balance: {eth_live:.4f} ETH")
         use_live_eth = st.checkbox("Use live ETH balance to auto-fill stack", value=False)
 
-# ✅ LP URL Support for v3 or v4
+# --- LP Lookup via URL ---
 lp_low = 2300.0
 lp_high = 2500.0
 match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
@@ -96,22 +95,21 @@ if match:
     else:
         st.warning("LP position not found or failed to fetch.")
 
-# Manual or auto-filled input fields
+# --- Inputs ---
 lp_low = st.number_input("Your LP Lower Bound ($)", value=lp_low)
 lp_high = st.number_input("Your LP Upper Bound ($)", value=lp_high)
 fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
 loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.0, step=50.0)
-
 eth_stack = eth_live if use_live_eth and eth_live else st.number_input("Current ETH Stack", value=8.75, step=0.01)
 
-# Price Scenario
+# --- Price Simulation ---
 st.subheader("Price Scenario Simulation")
 eth_scenario_price = st.slider("Simulate ETH Price ($)", 1000, 5000, int(current_price), step=50)
 collateral_usd = eth_stack * eth_scenario_price
 repayable_eth = loop2_debt_usd / eth_scenario_price
 net_eth = fees_earned_eth - repayable_eth
 
-# Status analysis
+# --- Range Check ---
 if current_price > lp_high:
     status = "above"
 elif current_price < lp_low:
@@ -119,7 +117,7 @@ elif current_price < lp_low:
 else:
     status = "in"
 
-# Exit Guidance
+# --- Output Guidance ---
 st.subheader("Guidance")
 if status == "in":
     st.success("✅ Your LP is currently in range. Let it continue accumulating fees.")
@@ -136,7 +134,7 @@ elif status == "below":
         recovery_price = loop2_debt_usd / eth_stack
         st.error(f"You need ETH to reach **${recovery_price:,.2f}** to repay Loop 2.")
 
-# P&L Summary
+# --- Summary Table ---
 st.subheader("P&L Summary")
 st.dataframe(pd.DataFrame({
     "Scenario Price ($)": [eth_scenario_price],
