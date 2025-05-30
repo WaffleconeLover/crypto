@@ -1,149 +1,115 @@
-# ETH Leverage Dashboard — Updated with Stable Loop 2 Grid
-
 import streamlit as st
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
+import matplotlib.pyplot as plt
 import requests
 
 st.set_page_config(page_title="ETH Leverage Heatmap", layout="wide")
 
-# ---------- State Initialization ----------
-if "eth_price_input" not in st.session_state:
-    st.session_state.eth_price_input = 2660.00
-if "loop1_eth" not in st.session_state:
-    st.session_state.loop1_eth = 10.4
-if "loop1_debt" not in st.session_state:
-    st.session_state.loop1_debt = 11200.0
+# --- Initialize session state ---
+def init_session_state():
+    defaults = {
+        "eth_price_input": 2600.0,
+        "eth_stack": 6.73,
+        "lp_eth_gain": 0.0,
+        "eth_supplied_loop1": 6.73,
+        "loop1_ltv_slider": 0.4,
+        "loop1_debt": 11200.0,
+        "loop1_eth": 10.4,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-# ---------- Utility ----------
+init_session_state()
+
+# --- Live ETH Price from CoinGecko ---
 def fetch_eth_price():
     try:
-        response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
-        return response.json()['ethereum']['usd']
-    except:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
+        r.raise_for_status()
+        return r.json()["ethereum"]["usd"]
+    except Exception:
         return None
-
-# ---------- Controls ----------
-st.title("ETH Leverage Heatmap")
-
-col1, col2 = st.columns([1, 1])
-with col1:
-    if st.button("🔄 Reset App (keep Loop 1)"):
-        st.experimental_rerun()
-with col2:
-    if st.button("❌ Reset Loop 1 Inputs"):
-        st.session_state.loop1_eth = 10.4
-        st.session_state.loop1_debt = 11200.0
-        st.experimental_rerun()
 
 eth_price_live = fetch_eth_price()
 if eth_price_live:
-    eth_price = eth_price_live
-    st.markdown(f"**Live ETH Price from CoinGecko:** ${eth_price:,.2f}")
+    st.session_state.eth_price_input = eth_price_live
+    st.markdown(f"**Live ETH Price from CoinGecko:** ${eth_price_live:,.2f}")
 else:
     st.warning("Unable to fetch live ETH price. Please enter it manually.")
-    eth_price = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=float(st.session_state.eth_price_input), step=10.0)
-    st.session_state.eth_price_input = eth_price
+    st.session_state.eth_price_input = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=st.session_state.eth_price_input, step=10.0)
 
-eth_stack = st.slider("Current ETH Stack", 1.0, 50.0, 6.73, step=0.01)
+eth_price = st.session_state.eth_price_input
 
-# ---------- Manual Loop 1 ----------
-with st.expander("Manual Loop 1 Setup", expanded=True):
-    loop1_eth = st.number_input("ETH Stack After Loop 1", value=st.session_state.loop1_eth, step=0.1)
-    st.session_state.loop1_eth = loop1_eth
-    loop1_debt = st.number_input("Debt After Loop 1 ($)", min_value=0.0, value=float(st.session_state.loop1_debt), step=10.0)
-    st.session_state.loop1_debt = loop1_debt
-    loop1_health = round(((loop1_eth * eth_price * 0.8) / loop1_debt), 2) if loop1_debt > 0 else 0.0
-    st.markdown(f"**Loop 1 Health Score:** {loop1_health:.2f}")
+# --- Current ETH Stack Slider ---
+st.session_state.eth_stack = st.slider("Current ETH Stack", 1.0, 50.0, st.session_state.eth_stack)
 
-# ---------- LP Exit ----------
-with st.expander("LP Exit Simulation", expanded=True):
-    eth_from_lp = st.number_input("ETH Gained from LP", min_value=0.0, step=0.01)
-    updated_stack = eth_stack + eth_from_lp
-    st.markdown(f"**Updated ETH Stack after LP Exit: {updated_stack:.2f} ETH**")
+# --- Loop 1 Setup: Collateral + Target LTV Calculator ---
+st.markdown("### Manual Loop 1 Setup")
+with st.expander("Manual Loop 1 Setup", expanded=False):
+    st.session_state.eth_supplied_loop1 = st.number_input("ETH Supplied as Collateral (Loop 1)", min_value=0.0, value=st.session_state.eth_supplied_loop1, step=0.1)
+    st.session_state.loop1_ltv_slider = st.slider("Target Loop 1 LTV (%)", 30, 60, int(st.session_state.loop1_ltv_slider * 100)) / 100
 
-# ---------- Loop 2 Grid Generation ----------
-second_loop_lvts = np.arange(30.0, 52.0, 1.0)
-data = []
+    # Auto-calculated values
+    st.session_state.loop1_debt = st.session_state.eth_supplied_loop1 * eth_price * st.session_state.loop1_ltv_slider
+    st.session_state.loop1_eth = st.session_state.eth_supplied_loop1 + (st.session_state.loop1_debt / eth_price)
 
-first_loop_eth = loop1_eth
-first_loop_debt = loop1_debt
-first_loop_collateral = first_loop_eth * eth_price
+    st.number_input("Debt After Loop 1 ($)", value=round(st.session_state.loop1_debt, 2), disabled=True)
+    st.number_input("ETH Stack After Loop 1", value=round(st.session_state.loop1_eth, 2), disabled=True)
 
-for s_ltv in second_loop_lvts:
-    loop2_debt = first_loop_collateral * (s_ltv / 100)
-    eth_bought_2 = loop2_debt / eth_price
-    total_eth = first_loop_eth + eth_bought_2
-    total_collateral = total_eth * eth_price
-    total_debt = first_loop_debt + loop2_debt
-    final_hs = (total_collateral * 0.8) / total_debt if total_debt > 0 else 0
-    liq_price = round((total_debt / (total_eth * 0.8)), 2) if total_eth > 0 else 0
-    liq_drop_pct = round((1 - (liq_price / eth_price)) * 100) if eth_price > 0 else 0
-    pct_gain = ((total_eth / eth_stack) - 1) * 100 if eth_stack > 0 else 0
+# --- Health Score after Loop 1 ---
+loop1_health_score = (st.session_state.eth_supplied_loop1 * eth_price) / st.session_state.loop1_debt if st.session_state.loop1_debt else 10.0
+st.markdown(f"**Loop 1 Health Score:** {loop1_health_score:.2f}")
 
-    data.append({
-        "Second LTV": s_ltv,
-        "First LTV": 40.0,
-        "Final Health Score": final_hs,
-        "Loop 2 Debt": int(loop2_debt),
-        "Liq Price": liq_price,
-        "Liq Drop %": liq_drop_pct,
-        "Total ETH": total_eth,
-        "ETH Gain %": pct_gain
-    })
+# --- LP Exit Simulator ---
+st.markdown("### LP Exit Simulation")
+with st.expander("LP Exit Simulation", expanded=False):
+    st.session_state.lp_eth_gain = st.number_input("ETH Gained from LP", min_value=0.0, value=st.session_state.lp_eth_gain, step=0.01)
+    updated_eth_stack = st.session_state.eth_stack + st.session_state.lp_eth_gain
+    st.markdown(f"**Updated ETH Stack after LP Exit: {updated_eth_stack:.2f} ETH**")
 
-heatmap_df = pd.DataFrame(data)
-heatmap_df = heatmap_df[heatmap_df["Final Health Score"] >= 1.6].copy()
+# --- Loop 2 Grid Calculations ---
+loop2_range = np.arange(30.0, 50.1, 1.0)  # Second loop LTV from 30% to 50% by 1%
+loop1_ltv_fixed = round(st.session_state.loop1_ltv_slider * 100, 1)
 
-heatmap_df["Score"] = (
-    heatmap_df["Final Health Score"] * 40 +
-    heatmap_df["Liq Drop %"] * 0.4 +
-    heatmap_df["ETH Gain %"] * 0.2 +
-    heatmap_df["Loop 2 Debt"] * 0.015
-)
-heatmap_df = heatmap_df.sort_values("Score", ascending=False).copy()
-heatmap_df["Rank"] = range(1, len(heatmap_df) + 1)
+records = []
+for ltv2 in loop2_range:
+    debt2 = st.session_state.loop1_eth * eth_price * (ltv2 / 100)
+    eth_added = debt2 / eth_price
+    total_eth = st.session_state.loop1_eth + eth_added
+    total_debt = st.session_state.loop1_debt + debt2
+    health_score = (total_eth * eth_price) / total_debt if total_debt else 10.0
+    if health_score >= 1.6:
+        records.append({
+            "Second LTV": ltv2,
+            "Total ETH": total_eth,
+            "Debt": debt2,
+            "Final Health Score": health_score
+        })
 
-required_cols = ["Final Health Score", "Loop 2 Debt", "Liq Drop %", "Liq Price", "Total ETH", "ETH Gain %", "Rank"]
-heatmap_df = heatmap_df.dropna(subset=required_cols)
+heatmap_df = pd.DataFrame(records)
 
-def strip_zero(val):
-    return f"{val:.2f}".rstrip("0").rstrip(".")
+if heatmap_df.empty:
+    st.info("No results meet the criteria (Final Health Score ≥ 1.6). Adjust inputs or try again.")
+else:
+    pivot_hs = heatmap_df.pivot(index="Second LTV", columns=None, values="Final Health Score")
+    pivot_labels = heatmap_df.pivot(index="Second LTV", columns=None, values="Total ETH")
 
-def format_label(row):
-    try:
-        return (
-            f"{strip_zero(row['Final Health Score'])}\n"
-            f"${row['Loop 2 Debt']}\n"
-            f"↓{int(row['Liq Drop %'])}% @ ${strip_zero(row['Liq Price'])}\n"
-            f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
-            f"#{int(row['Rank'])}"
-        )
-    except:
-        return ""
-
-heatmap_df["Label"] = heatmap_df.apply(format_label, axis=1)
-pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
-pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
-
-if not pivot_hs.empty:
-    fig, ax = plt.subplots(figsize=(3, 14))
+    fig, ax = plt.subplots(figsize=(5, 10))
     sns.heatmap(
         pivot_hs,
         annot=pivot_labels,
-        fmt="",
+        fmt=".2f",
         cmap="RdYlGn",
         cbar_kws={'label': 'Final Health Score'},
         annot_kws={'fontsize': 7},
         ax=ax
     )
     plt.title("Top ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
-    plt.xlabel("First Loop LTV (%)")
+    plt.xlabel("Loop 1 Fixed LTV")
     plt.ylabel("Second Loop LTV (%)")
     st.pyplot(fig)
-else:
-    st.info("No results meet the criteria (Final Health Score ≥ 1.6). Adjust inputs or try again.")
 
 st.markdown("**Instructions:** Loop 1 is now manually set. Explore granular Loop 2 options with a minimum health score of 1.6.")
