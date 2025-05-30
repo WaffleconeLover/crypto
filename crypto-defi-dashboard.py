@@ -57,5 +57,4 @@ df["Rank"] = df["Health Score"].rank(ascending=False).astype(int)
 df = df[["LTV Loop 2 (%)", "USDC Loan", "Health Score", "% to Liquidation", "Price at Liquidation", "Rank"]]
 
 # --- Display Table with Interactive Sorting & Filtering ---
-st.markdown("### Loop 2 Results (Sortable/Filterable)")
 st.data_editor(df, use_container_width=True, hide_index=True, disabled=True)
