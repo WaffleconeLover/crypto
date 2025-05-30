@@ -5,8 +5,11 @@ import numpy as np
 import yfinance as yf
 import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="ETH Leverage Loop Simulator", layout="wide")
-st.title("ETH Leverage Loop Simulator")
+st.set_page_config(
+    page_title="Crypto Defi Dashboard",
+    page_icon="💸",
+    layout="wide"
+)
 
 # --- Fetch ETH Price ---
 def fetch_eth_price():
