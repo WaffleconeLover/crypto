@@ -82,7 +82,7 @@ if out_of_range == "in":
 elif out_of_range == "above":
     st.markdown(f"Price is **{(current_price - lp_high) / lp_high:.1%} above** your LP range.")
     st.markdown(f"You've earned **{fees_earned_eth:.2f} ETH** in fees.")
-    st.markdown(f"Loop 2 debt is **${loop2_debt_usd:,.2f}**, or **{repayable_eth:.2f} ETH** at scenario price ${eth_scenario_price:,.2f}.")
+    st.markdown(f"Loop 2 debt is **${loop2_debt_usd:,.2f}**, or **{repayable_eth:.2f} ETH** at scenario price **${eth_scenario_price:,.2f}**.")
     if net_eth > 0:
         st.success(f"✅ You can fully repay Loop 2 with fees and retain **{net_eth:.2f} ETH**.")
     else:
