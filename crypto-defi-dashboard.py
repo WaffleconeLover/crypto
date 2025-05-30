@@ -48,34 +48,18 @@ for ltv2 in LOOP2_LTV_RANGE:
 
     results.append({
         "LTV Loop 2 (%)": ltv2,
-        "USDC Loan": loop2_debt,
+        "USDC Loan": f"${loop2_debt:,.2f}",
         "Health Score": round(health_score, 2),
-        "% to Liquidation": round(pct_to_liquidation, 1),
-        "Price at Liquidation": liquidation_price
+        "% to Liquidation": f"{pct_to_liquidation:.1f}%",
+        "Price at Liquidation": f"${liquidation_price:,.2f}"
     })
 
-# Convert to DataFrame and format
+# Convert to DataFrame
 df = pd.DataFrame(results)
 df["Rank"] = df["Health Score"].rank(ascending=False).astype(int)
-df["USDC Loan"] = df["USDC Loan"].apply(lambda x: f"${x:,.2f}")
-df["% to Liquidation"] = df["% to Liquidation"].apply(lambda x: f"{x:.1f}%")
-df["Price at Liquidation"] = df["Price at Liquidation"].apply(lambda x: f"${x:,.2f}")
 
 # Reorder columns
 df = df[["LTV Loop 2 (%)", "USDC Loan", "Health Score", "% to Liquidation", "Price at Liquidation", "Rank"]]
 
-# --- Display as interactive, scroll-free table ---
-st.data_editor(
-    df,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "LTV Loop 2 (%)": st.column_config.NumberColumn("LTV Loop 2 (%)", format="%d"),
-        "USDC Loan": st.column_config.TextColumn("USDC Loan"),
-        "Health Score": st.column_config.NumberColumn("Health Score", format="%.2f"),
-        "% to Liquidation": st.column_config.TextColumn("% to Liquidation"),
-        "Price at Liquidation": st.column_config.TextColumn("Price at Liquidation"),
-        "Rank": st.column_config.NumberColumn("Rank", format="%d"),
-    },
-    disabled=True
-)
+# Show full static table
+st.table(df)
