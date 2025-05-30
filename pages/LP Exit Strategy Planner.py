@@ -1,4 +1,4 @@
-# LP Exit Planner - Phase 1 Expansion + LP Integration Scaffold
+# LP Exit Planner - Phase 1 Expansion + LP Integration Scaffold + Moralis ETH Balance
 import streamlit as st
 import pandas as pd
 import requests
@@ -29,11 +29,36 @@ def fetch_uniswap_v3_positions(wallet):
     response = requests.post(url, json={"query": query})
     return response.json()
 
+# --- Moralis ETH Balance Fetch ---
+def get_eth_balance(wallet_address, moralis_api_key):
+    headers = {
+        "accept": "application/json",
+        "X-API-Key": moralis_api_key
+    }
+    url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/balance?chain=eth"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        balance_wei = int(response.json()["balance"])
+        return balance_wei / 1e18
+    else:
+        return None
+
+# --- ETH Price Fallback ---
+def fetch_eth_price():
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
+        return r.json()["ethereum"]["usd"]
+    except:
+        return 2578.00
+
+if "eth_price" not in st.session_state:
+    st.session_state.eth_price = fetch_eth_price()
+
+current_price = st.session_state.eth_price
+
 # --- Inputs ---
 lp_low = st.number_input("Your LP Lower Bound ($)", value=2300.0)
 lp_high = st.number_input("Your LP Upper Bound ($)", value=2500.0)
-current_price = st.session_state.eth_price
-
 fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
 loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.00, step=50.00)
 eth_stack = st.number_input("Current ETH Stack", value=8.75, step=0.01)
@@ -42,21 +67,29 @@ eth_stack = st.number_input("Current ETH Stack", value=8.75, step=0.01)
 st.subheader("🔗 LP Live Data Integration (Optional)")
 wallet_address = st.text_input("Enter Wallet Address for LP Tracking")
 platform = st.selectbox("Select LP Platform", ["Uniswap V3", "Metrix", "Other"], index=0)
+moralis_key = st.text_input("Paste your Moralis API Key", type="password")
 
-if wallet_address and platform == "Uniswap V3":
-    lp_data = fetch_uniswap_v3_positions(wallet_address)
+if wallet_address:
+    if platform == "Uniswap V3":
+        lp_data = fetch_uniswap_v3_positions(wallet_address)
+        if "data" in lp_data and "positions" in lp_data["data"]:
+            st.subheader("📊 LP Positions Found")
+            for i, position in enumerate(lp_data["data"]["positions"]):
+                pool = position["pool"]
+                st.markdown(f"**Position {i+1}: {pool['token0']['symbol']} / {pool['token1']['symbol']}**")
+                st.markdown(f"- Liquidity: {position['liquidity']}")
+                st.markdown(f"- Fee Tier: {int(pool['feeTier']) / 10000:.2%}")
+                st.markdown(f"- Tick Range: {position['tickLower']['tickIdx']} to {position['tickUpper']['tickIdx']}")
+                st.markdown("---")
+        else:
+            st.warning("No LP positions found or failed to fetch.")
 
-    if "data" in lp_data and "positions" in lp_data["data"]:
-        st.subheader("📊 LP Positions Found")
-        for i, position in enumerate(lp_data["data"]["positions"]):
-            pool = position["pool"]
-            st.markdown(f"**Position {i+1}: {pool['token0']['symbol']} / {pool['token1']['symbol']}**")
-            st.markdown(f"- Liquidity: {position['liquidity']}")
-            st.markdown(f"- Fee Tier: {int(pool['feeTier']) / 10000:.2%}")
-            st.markdown(f"- Tick Range: {position['tickLower']['tickIdx']} to {position['tickUpper']['tickIdx']}")
-            st.markdown("---")
-    else:
-        st.warning("No LP positions found or failed to fetch.")
+    if moralis_key:
+        eth_live = get_eth_balance(wallet_address, moralis_key)
+        if eth_live is not None:
+            st.success(f"Live ETH Balance: {eth_live:.4f} ETH")
+        else:
+            st.error("Failed to fetch ETH balance from Moralis.")
 
 # --- Scenarios ---
 st.subheader("Price Scenario Simulation")
