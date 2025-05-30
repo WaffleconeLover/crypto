@@ -53,10 +53,11 @@ def fetch_from_moralis(position_id):
     headers = {"accept": "application/json", "X-API-Key": moralis_key}
     url = f"https://deep-index.moralis.io/api/v2.2/{UNIV3_NFT_CONTRACT}/function?chain=arbitrum"
 
-    call_data = {
-        "function_name": "positions",
-        "abi": {
-            "inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}],
+    abi = [
+        {
+            "inputs": [
+                {"internalType": "uint256", "name": "tokenId", "type": "uint256"}
+            ],
             "name": "positions",
             "outputs": [
                 {"internalType": "uint96", "name": "nonce", "type": "uint96"},
@@ -74,15 +75,20 @@ def fetch_from_moralis(position_id):
             ],
             "stateMutability": "view",
             "type": "function"
-        },
+        }
+    ]
+
+    call_data = {
+        "function_name": "positions",
+        "abi": abi,
         "params": [position_id]
     }
 
     try:
         r = requests.post(url, headers=headers, json=call_data)
         return r.json()
-    except:
-        return {"error": "Failed to call Moralis contract function"}
+    except Exception as e:
+        return {"error": str(e)}
 
 def tick_to_price(tick):
     return 1.0001 ** int(tick)
