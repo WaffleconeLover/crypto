@@ -27,6 +27,17 @@ st.header("Step 2: Configure Loop 1")
 initial_collateral_eth = st.number_input("Initial ETH Collateral", value=6.73, step=0.01)
 ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=10, max_value=58, value=30)
 
+# Optional: Volatility Lookback Window
+expected_lp_days = st.slider("Expected LP Duration (Days)", min_value=1, max_value=30, value=7)
+
+# Placeholder for volatility logic (won't error out if yfinance missing)
+def get_eth_volatility(days):
+    return None  # To be implemented later
+
+volatility = get_eth_volatility(expected_lp_days)
+if volatility:
+    st.markdown(f"**Estimated ETH Volatility (Annualized):** {volatility:.2%}")
+
 # --- Loop 1 Calculations ---
 collateral_value_usd = initial_collateral_eth * eth_price
 loop1_debt = collateral_value_usd * ltv1 / 100
