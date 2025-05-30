@@ -7,7 +7,7 @@ st.header("Step 4: LP Exit Planner")
 
 # ✅ Updated with authenticated subgraph for Arbitrum
 def get_arbitrum_subgraph_url(api_key):
-    return f"https://gateway-arbitrum.network.thegraph.com/api/{api_key}/subgraphs/id/3x7LPQ4KgLxnhYDCq3ztPDC9oLb3fXwbhrkYu9nRMNRJ"
+    return f"https://gateway.thegraph.com/api/{api_key}/subgraphs/name/uniswap/uniswap-v3-arbitrum"
 
 SUBGRAPH_URLS = {
     "ethereum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
