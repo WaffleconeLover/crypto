@@ -1,14 +1,18 @@
+# ETH Leverage LP Strategy Dashboard
+# This version preserves all previous features and prepares for additional volatility overlays and trade management tools.
+
 import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import yfinance as yf
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="ETH Leverage Loop Simulator", layout="wide")
 st.title("ETH Leverage Loop Simulator")
 
-# --- Fetch ETH price ---
+# === Step 1: Real-time ETH price ===
 def fetch_eth_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
@@ -25,13 +29,28 @@ if st.button("Refresh ETH Price from CoinGecko"):
 eth_price = st.session_state.eth_price
 st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 
-# --- Inputs ---
+# === Step 2: Configure Loop 1 ===
 st.header("Step 2: Configure Loop 1")
 initial_collateral_eth = st.number_input("Initial ETH Collateral", value=6.73, step=0.01)
 ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=10, max_value=58, value=30)
 expected_lp_days = st.slider("Expected LP Duration (Days)", min_value=1, max_value=30, value=7)
 
-# --- Loop 1 ---
+# --- Lock logic ---
+if "loop1_locked" not in st.session_state:
+    st.session_state.loop1_locked = False
+if "locked_ltv1" not in st.session_state:
+    st.session_state.locked_ltv1 = ltv1
+if st.button("Lock Loop 1 Settings"):
+    st.session_state.loop1_locked = True
+    st.session_state.locked_ltv1 = ltv1
+if st.button("Unlock Loop 1 Settings"):
+    st.session_state.loop1_locked = False
+
+if st.session_state.loop1_locked:
+    ltv1 = st.session_state.locked_ltv1
+    st.markdown(f"**Loop 1 LTV is Locked at:** {ltv1}%")
+
+# --- Loop 1 Calculations ---
 collateral_value_usd = initial_collateral_eth * eth_price
 loop1_debt = collateral_value_usd * ltv1 / 100
 eth_gained = loop1_debt / eth_price
@@ -41,38 +60,27 @@ loop1_health_score = (new_collateral_usd * 0.80) / loop1_debt
 loop1_liquidation_price = (loop1_debt / eth_stack_after_loop1) / 0.80
 loop1_pct_to_liquidation = 1 - (loop1_liquidation_price / eth_price)
 
-# --- Volatility Estimation ---
+# === Volatility ===
 def get_eth_volatility(days):
     end = datetime.now()
-    start = end - timedelta(days=60)
-    url = f"https://api.coingecko.com/api/v3/coins/ethereum/market_chart/range?vs_currency=usd&from={int(start.timestamp())}&to={int(end.timestamp())}"
-    r = requests.get(url).json()
-    df = pd.DataFrame(r["prices"], columns=["timestamp", "price"])
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-    df.set_index("timestamp", inplace=True)
-    df["returns"] = df["price"].pct_change()
-    rolling_std = df["returns"].rolling(window=days).std()
-    annualized_vol = rolling_std * np.sqrt(365)
-    current_vol = annualized_vol.iloc[-1]
-    return df["price"], annualized_vol, current_vol
+    start = end - timedelta(days=90)
+    df = yf.download("ETH-USD", start=start, end=end)
+    df = df.dropna()
+    df['returns'] = df['Adj Close'].pct_change()
+    df['vol'] = df['returns'].rolling(window=days).std() * np.sqrt(365)
+    return df
 
-price_series, vol_series, current_vol = get_eth_volatility(expected_lp_days)
-vol_pct = current_vol * 100 if current_vol else 0
+df_vol = get_eth_volatility(expected_lp_days)
+latest_vol = df_vol['vol'].iloc[-1] * 100
 
-# --- Categorize Volatility ---
-def classify_volatility(vol):
-    if vol < 30:
-        return "Low"
-    elif vol < 60:
-        return "Moderate"
-    elif vol < 100:
-        return "High"
-    else:
-        return "Extreme"
+if latest_vol < 20:
+    regime = "Low"
+elif latest_vol < 40:
+    regime = "Medium"
+else:
+    regime = "High"
 
-vol_category = classify_volatility(vol_pct)
-
-# --- Loop 1 Summary ---
+# === Loop 1 Summary ===
 st.subheader("Loop 1 Summary")
 st.markdown(f"- **Debt After Loop 1:** ${loop1_debt:,.2f}")
 st.markdown(f"- **ETH Gained After Loop 1:** {eth_gained:.2f}")
@@ -81,28 +89,23 @@ st.markdown(f"- **New Collateral After Loop 1:** ${new_collateral_usd:,.2f}")
 st.markdown(f"- **Loop 1 Health Score:** {loop1_health_score:.2f}")
 st.markdown(f"- **Loop 1 % to Liquidation:** {loop1_pct_to_liquidation:.1%}")
 st.markdown(f"- **Loop 1 Liquidation Price:** ${loop1_liquidation_price:,.2f}")
-st.markdown(f"- **Est. Annualized Volatility ({expected_lp_days}D Lookback):** {vol_pct:.2f}%")
-st.markdown(f"- **Market Behavior:** {vol_category}")
+st.markdown(f"- **Est. Annualized Volatility ({expected_lp_days}D Lookback):** {latest_vol:.2f}%")
+st.markdown(f"- **Market Behavior:** {regime}")
 
-# --- Volatility Chart ---
+# === Volatility Chart ===
 st.subheader("Volatility Trend")
-fig, ax1 = plt.subplots(figsize=(10, 4))  # Smaller width and height
-
-ax1.plot(price_series.index, price_series.values, label="ETH Price ($)", color="blue")
-ax1.set_ylabel("ETH Price ($)", color="blue")
-ax1.tick_params(axis='y', labelcolor="blue")
+fig, ax1 = plt.subplots(figsize=(9, 4))
+ax1.plot(df_vol.index, df_vol['Adj Close'], color='blue', label='ETH Price ($)')
+ax1.set_ylabel("ETH Price ($)", color='blue')
 
 ax2 = ax1.twinx()
-ax2.plot(vol_series.index, vol_series.values * 100, label="Volatility (%)", color="red")
-ax2.set_ylabel("Annualized Volatility (%)", color="red")
-ax2.tick_params(axis='y', labelcolor="red")
-
-fig.tight_layout()
+ax2.plot(df_vol.index, df_vol['vol'] * 100, color='red', label='Volatility (%)')
+ax2.set_ylabel("Annualized Volatility (%)", color='red')
 st.pyplot(fig)
 
-# --- Loop 2 Simulation ---
+# === Step 3: Loop 2 Evaluation ===
 st.header("Step 3: Loop 2 Evaluation")
-ltv2_range = range(10, 50)
+ltv2_range = range(10, 30)
 loop2_data = []
 
 for ltv2 in ltv2_range:
@@ -111,7 +114,6 @@ for ltv2 in ltv2_range:
     hf2 = (new_collateral_usd * 0.80) / total_debt
     price_at_liq = total_debt / (eth_stack_after_loop1 * 0.80)
     pct_to_liq = 1 - (price_at_liq / eth_price)
-
     loop2_data.append({
         "LTV (%)": ltv2,
         "Health Score": round(hf2, 2),
@@ -120,5 +122,4 @@ for ltv2 in ltv2_range:
         "ETH Price at Liquidation": f"${price_at_liq:,.2f}"
     })
 
-df = pd.DataFrame(loop2_data)
-st.dataframe(df, use_container_width=True)
+st.dataframe(pd.DataFrame(loop2_data), use_container_width=True)
