@@ -3,15 +3,35 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import requests
 
 # Streamlit config
 st.set_page_config(page_title="ETH Leverage Heatmap", layout="wide")
 
 st.title("ETH Leverage Heatmap")
 
+# Try real-time ETH price
+eth_price_default = 2660
+try:
+    eth_response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
+    eth_price_live = eth_response.json().get("ethereum", {}).get("usd", eth_price_default)
+    st.markdown(f"**Live ETH Price from CoinGecko: ${eth_price_live:.2f}**")
+except:
+    eth_price_live = eth_price_default
+    st.warning("Unable to fetch live ETH price, using default.")
+
 # Input sliders
 eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=6.73, step=0.01)
-eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=2660, step=10)
+eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=int(eth_price_live), step=10)
+
+# Estimated Aave health score
+st.markdown(f"### Estimated Aave Health Score: {(eth_stack * eth_price * 0.8) / (eth_stack * eth_price * 0.4):.2f} (based on 40% LTV)")
+
+# LP Exit Simulator
+st.markdown("### LP Exit Simulation")
+eth_gained = st.number_input("ETH Gained from LP", min_value=0.0, value=0.0, step=0.01)
+updated_eth_stack = eth_stack + eth_gained
+st.markdown(f"**Updated ETH Stack after LP Exit: {updated_eth_stack:.2f} ETH**")
 
 # Grid definitions (fixed Loop 1 at 40%)
 first_loop_ltv = 40.0
@@ -101,5 +121,3 @@ plt.ylabel("Second Loop LTV (%)")
 st.pyplot(fig)
 
 st.markdown("**Instructions:** First loop is fixed at 40%. Explore granular Loop 2 options with a minimum health score of 1.6.")
-
-# TODO: Add LP sliders for exit simulation and ETHFI ratio setup
