@@ -20,36 +20,42 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
             st.error("Arbitrum requires a valid Graph API key.")
             return None
         url = get_arbitrum_subgraph_url(api_key)
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
     else:
         url = SUBGRAPH_URLS[network]
-        headers = {}
+        headers = {"Content-Type": "application/json"}
 
-    query = f"""
-    {{
-      position(id: "{position_id_str}") {{
-        id
-        liquidity
-        depositedToken0
-        depositedToken1
-        collectedFeesToken0
-        collectedFeesToken1
-        pool {{
-          token0 {{ symbol decimals }}
-          token1 {{ symbol decimals }}
-          feeTier
+    query = {
+        "query": f"""
+        {{
+          position(id: "{position_id_str}") {{
+            id
+            liquidity
+            depositedToken0
+            depositedToken1
+            collectedFeesToken0
+            collectedFeesToken1
+            pool {{
+              token0 {{ symbol decimals }}
+              token1 {{ symbol decimals }}
+              feeTier
+            }}
+            tickLower {{ tickIdx }}
+            tickUpper {{ tickIdx }}
+          }}
         }}
-        tickLower {{ tickIdx }}
-        tickUpper {{ tickIdx }}
-      }}
-    }}
-    """
+        """
+    }
 
-    response = requests.post(url, json={"query": query}, headers=headers)
     try:
+        response = requests.post(url, json=query, headers=headers)
         return response.json()
-    except:
-        return {"errors": ["Failed to parse response"]}
+    except Exception as e:
+        return {"ERROR": {"message": str(e)}}
+
 
 def tick_to_price(tick):
     return 1.0001 ** int(tick)
