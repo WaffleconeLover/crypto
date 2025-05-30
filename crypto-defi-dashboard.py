@@ -10,26 +10,45 @@ st.set_page_config(page_title="ETH Leverage Heatmap", layout="wide")
 
 st.title("ETH Leverage Heatmap")
 
-# Try real-time ETH price
+# Session state setup for reset
+if "eth_stack" not in st.session_state:
+    st.session_state.eth_stack = 6.73
+    st.session_state.eth_price_input = 2660
+    st.session_state.eth_gained = 0.0
+
+if st.button("🔁 Reset to Defaults"):
+    st.session_state.eth_stack = 6.73
+    st.session_state.eth_price_input = 2660
+    st.session_state.eth_gained = 0.0
+
+# Try to fetch real-time ETH price
 eth_price_default = 2660
+eth_price_live = None
 try:
     eth_response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
-    eth_price_live = eth_response.json().get("ethereum", {}).get("usd", eth_price_default)
-    st.markdown(f"**Live ETH Price from CoinGecko: ${eth_price_live:.2f}**")
+    eth_price_live = eth_response.json().get("ethereum", {}).get("usd")
 except:
-    eth_price_live = eth_price_default
-    st.warning("Unable to fetch live ETH price, using default.")
+    eth_price_live = None
+
+if eth_price_live:
+    st.markdown(f"**Live ETH Price from CoinGecko: ${eth_price_live:.2f}**")
+    eth_price = eth_price_live
+else:
+    st.warning("Unable to fetch live ETH price. Please enter it manually.")
+    eth_price = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=st.session_state.eth_price_input, step=10.0)
+    st.session_state.eth_price_input = eth_price
 
 # Input sliders
-eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=6.73, step=0.01)
-eth_price = st.slider("Current ETH Price ($)", min_value=500, max_value=10000, value=int(eth_price_live), step=10)
+eth_stack = st.slider("Current ETH Stack", min_value=1.0, max_value=50.0, value=st.session_state.eth_stack, step=0.01)
+st.session_state.eth_stack = eth_stack
 
 # Estimated Aave health score
 st.markdown(f"### Estimated Aave Health Score: {(eth_stack * eth_price * 0.8) / (eth_stack * eth_price * 0.4):.2f} (based on 40% LTV)")
 
 # LP Exit Simulator
 st.markdown("### LP Exit Simulation")
-eth_gained = st.number_input("ETH Gained from LP", min_value=0.0, value=0.0, step=0.01)
+eth_gained = st.number_input("ETH Gained from LP", min_value=0.0, value=st.session_state.eth_gained, step=0.01)
+st.session_state.eth_gained = eth_gained
 updated_eth_stack = eth_stack + eth_gained
 st.markdown(f"**Updated ETH Stack after LP Exit: {updated_eth_stack:.2f} ETH**")
 
