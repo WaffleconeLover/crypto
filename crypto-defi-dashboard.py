@@ -70,12 +70,9 @@ pct_to_liq = 1 - (liq_price / eth_price)
 # --- Volatility ---
 def get_eth_volatility(days):
     df = yf.download("ETH-USD", period="90d", interval="1d")
-    if 'Adj Close' in df.columns:
-        df['returns'] = df['Adj Close'].pct_change()
-        price_series = df['Adj Close']
-    else:
-        df['returns'] = df['Close'].pct_change()
-        price_series = df['Close']
+    price_col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
+    df['returns'] = df[price_col].pct_change()
+    price_series = df[price_col]
     rolling_std = df['returns'].rolling(window=days).std()
     vol_annualized = rolling_std.iloc[-1] * np.sqrt(365)
     return vol_annualized, df, price_series, rolling_std
@@ -105,7 +102,7 @@ st.markdown(f"- **Market Behavior:** {categorize_vol(vol_pct)}")
 
 # --- Volatility Chart ---
 st.subheader("Volatility Trend")
-fig, ax1 = plt.subplots(figsize=(10, 4))
+fig, ax1 = plt.subplots(figsize=(8, 3))
 ax1.plot(price_series.index, price_series, color='blue', label='ETH Price ($)')
 ax1.set_ylabel("ETH Price ($)", color='blue')
 ax2 = ax1.twinx()
@@ -116,20 +113,19 @@ st.pyplot(fig)
 
 # --- Loop 2 Simulation ---
 st.header("Step 3: Loop 2 Evaluation")
-
 loop2_data = []
 for ltv2 in range(10, 50):
     loan2 = total_collateral_usd * ltv2 / 100
     total_debt = debt_usd + loan2
     hf = (total_collateral_usd * 0.80) / total_debt
-    liq_price = total_debt / (total_eth * 0.80)
-    pct_to_liq = 1 - (liq_price / eth_price)
+    liq_price2 = total_debt / (total_eth * 0.80)
+    pct_to_liq2 = 1 - (liq_price2 / eth_price)
     loop2_data.append({
         "LTV (%)": ltv2,
         "Health Score": round(hf, 2),
         "Loan Amount ($)": f"${loan2:,.2f}",
-        "% to Liquidation": f"{pct_to_liq:.1%}",
-        "ETH Price at Liquidation": f"${liq_price:,.2f}"
+        "% to Liquidation": f"{pct_to_liq2:.1%}",
+        "ETH Price at Liquidation": f"${liq_price2:,.2f}"
     })
 
 df = pd.DataFrame(loop2_data)
