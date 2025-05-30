@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-st.markdown("# Crypto Defi Dashboard")  # Also gives a nice header
+st.markdown("# AAVE Collateral and Lending")  # Also gives a nice header
 
 # --- Fetch ETH Price ---
 def fetch_eth_price():
