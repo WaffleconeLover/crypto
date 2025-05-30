@@ -5,33 +5,57 @@ import re
 
 st.header("Step 4: LP Exit Planner")
 
-def get_arbitrum_positions(wallet_address, moralis_key):
-    headers = {"accept": "application/json", "X-API-Key": moralis_key}
-    url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/uniswapv3/liquidity-positions?chain=arbitrum"
-    res = requests.get(url, headers=headers)
-    if res.status_code == 200:
-        return res.json().get("result", [])
-    return []
+# Pre-configured values (no input required)
+DEFAULT_GRAPH_KEY = "d997b56020107b5449f63d478635f9c6"
+DEFAULT_MORALIS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjgyMDNmNDlmLTMzOWMtNDc5YS04Y2U4LTM0YzI5M2IzODU3YyIsIm9yZ0lkIjoiNDMwOTg5IiwidXNlcklkIjoiNDQzMzM1IiwidHlwZUlkIjoiMmVlOTUxYjAtOTk4ZC00NjRmLWFmZTEtM2FlZDVlNjhhMzE3IiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3MzkzNzI3NTUsImV4cCI6NDg5NTEzMjc1NX0.8GWca9PdAXaJ5ReNTdCKnMQkQ3GdEGPOj67yTw19krM"
+DEFAULT_WALLET = "0xb4f25c81fb52d959616e3837cbc9e24a283b9df4"
 
-def get_ethereum_position(position_id):
-    url = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3"
+def get_arbitrum_subgraph_url(api_key):
+    return f"https://gateway.thegraph.com/api/{api_key}/subgraphs/name/uniswap/uniswap-v3-arbitrum"
+
+SUBGRAPH_URLS = {
+    "ethereum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
+    "arbitrum": None
+}
+
+def fetch_position_by_id(position_id_str, network, api_key=None):
+    if network == "arbitrum":
+        if not api_key:
+            st.error("Arbitrum requires a valid Graph API key.")
+            return None
+        url = get_arbitrum_subgraph_url(api_key)
+        headers = {"Content-Type": "application/json"}
+    else:
+        url = SUBGRAPH_URLS[network]
+        headers = {"Content-Type": "application/json"}
+
     query = {
         "query": f"""
         {{
-          position(id: "{position_id}") {{
+          position(id: "{position_id_str}") {{
             id
+            liquidity
+            depositedToken0
+            depositedToken1
+            collectedFeesToken0
+            collectedFeesToken1
+            pool {{
+              token0 {{ symbol decimals }}
+              token1 {{ symbol decimals }}
+              feeTier
+            }}
             tickLower {{ tickIdx }}
             tickUpper {{ tickIdx }}
-            pool {{ token0 {{ symbol }} token1 {{ symbol }} }}
           }}
         }}
         """
     }
+
     try:
-        res = requests.post(url, json=query)
-        return res.json().get("data", {}).get("position")
-    except:
-        return None
+        response = requests.post(url, headers=headers, json=query)
+        return response.json()
+    except Exception as e:
+        return {"ERROR": {"message": str(e)}}
 
 def tick_to_price(tick):
     return 1.0001 ** int(tick)
@@ -42,7 +66,7 @@ def get_eth_balance(wallet_address, moralis_api_key):
     r = requests.get(url, headers=headers)
     return int(r.json()["balance"]) / 1e18 if r.status_code == 200 else None
 
-# ETH price
+# --- ETH Price ---
 if "eth_price" not in st.session_state:
     try:
         price_data = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").json()
@@ -55,12 +79,12 @@ current_price = st.session_state.eth_price
 # --- UI ---
 st.subheader("🔗 LP Live Data Integration (Optional)")
 lp_url = st.text_input("Paste Uniswap LP Position URL")
-graph_key = st.text_input("Paste your Graph API Key (for Ethereum)", type="password")
-moralis_key = st.text_input("Paste your Moralis API Key (for ETH tracking + fallback)", type="password")
-wallet_address = st.text_input("Wallet Address (optional for ETH tracking)")
+graph_key = st.text_input("Paste your Graph API Key (for Ethereum)", value=DEFAULT_GRAPH_KEY, type="password")
+moralis_key = st.text_input("Paste your Moralis API Key (for ETH tracking + fallback)", value=DEFAULT_MORALIS_KEY, type="password")
+wallet_address = st.text_input("Wallet Address (optional for ETH tracking)", value=DEFAULT_WALLET)
 manual_network = st.selectbox("Network", ["ethereum", "arbitrum"], index=1)
 
-# Optional: ETH balance
+# --- Live ETH (Optional) ---
 use_live_eth = False
 eth_live = None
 if wallet_address and moralis_key:
@@ -69,47 +93,28 @@ if wallet_address and moralis_key:
         st.success(f"Live ETH Balance: {eth_live:.4f} ETH")
         use_live_eth = st.checkbox("Use live ETH balance to auto-fill stack", value=False)
 
-# LP range defaults
+# --- LP Range Defaults ---
 lp_low = 2300.0
 lp_high = 2500.0
 match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
-
 if match:
     network_from_url = match.group(1).lower()
     position_id = match.group(2)
+    position_id_str = str(position_id)
     selected_network = network_from_url if network_from_url in ["ethereum", "arbitrum"] else manual_network
-
-    if selected_network == "ethereum":
-        position = get_ethereum_position(position_id)
-        if position:
-            tick_low = int(position["tickLower"]["tickIdx"])
-            tick_high = int(position["tickUpper"]["tickIdx"])
-            token0 = position["pool"]["token0"]["symbol"]
-            token1 = position["pool"]["token1"]["symbol"]
-            lp_low = round(tick_to_price(tick_low) * current_price, 2)
-            lp_high = round(tick_to_price(tick_high) * current_price, 2)
-            st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
-        else:
-            st.warning("LP not found on Ethereum.")
-    elif selected_network == "arbitrum" and wallet_address and moralis_key:
-        positions = get_arbitrum_positions(wallet_address, moralis_key)
-        match = next((p for p in positions if p["liquidity_token"]["token_id"] == position_id), None)
-        if match:
-            try:
-                lower = match["tick_lower"]
-                upper = match["tick_upper"]
-                pool_price = float(match["pool"]["sqrt_price"]) / (1 << 96)
-                token0 = match["token0"]["symbol"]
-                token1 = match["token1"]["symbol"]
-                lp_low = round((1.0001 ** int(lower)) * current_price, 2)
-                lp_high = round((1.0001 ** int(upper)) * current_price, 2)
-                st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
-            except Exception as e:
-                st.warning(f"Error parsing LP range: {e}")
-        else:
-            st.warning("No matching LP found for this wallet/position.")
+    response = fetch_position_by_id(position_id_str, selected_network, api_key=graph_key)
+    pos = response.get("data", {}).get("position") if response else None
+    if pos:
+        token0 = pos["pool"]["token0"]["symbol"]
+        token1 = pos["pool"]["token1"]["symbol"]
+        tick_low = int(pos["tickLower"]["tickIdx"])
+        tick_high = int(pos["tickUpper"]["tickIdx"])
+        lp_low = round(tick_to_price(tick_low) * current_price, 2)
+        lp_high = round(tick_to_price(tick_high) * current_price, 2)
+        st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
     else:
-        st.warning("To fetch Arbitrum LPs, please enter a valid wallet address and Moralis key.")
+        st.warning("LP position not found or failed to fetch.")
+        st.json(response)
 
 # --- Inputs ---
 lp_low = st.number_input("Your LP Lower Bound ($)", value=lp_low)
