@@ -5,7 +5,7 @@ st.set_page_config(page_title="ETH Leverage Strategy Dashboard", layout="wide")
 
 # Constants
 LIQUIDATION_THRESHOLD = 0.83
-LOOP2_LTV_RANGE = range(30, 51)  # Show 30% to 50% LTV
+LOOP2_LTV_RANGE = range(30, 51)
 
 # Title
 st.title("ETH Leverage Strategy Dashboard")
@@ -34,7 +34,7 @@ st.write(f"**ETH Gained After Loop 1:** {eth_gained:.2f}")
 st.write(f"**ETH Stack After Loop 1:** {eth_stack:.2f}")
 st.write(f"**Loop 1 Health Score:** {loop1_health_score:.2f}")
 
-# --- Loop 2 Grid ---
+# --- Loop 2 Simulation ---
 st.subheader("Loop 2 Simulation")
 
 results = []
@@ -48,18 +48,34 @@ for ltv2 in LOOP2_LTV_RANGE:
 
     results.append({
         "LTV Loop 2 (%)": ltv2,
-        "USDC Loan": f"${loop2_debt:,.2f}",
+        "USDC Loan": loop2_debt,
         "Health Score": round(health_score, 2),
-        "% to Liquidation": f"{pct_to_liquidation:.1f}%",
-        "Price at Liquidation": f"${liquidation_price:,.2f}"
+        "% to Liquidation": round(pct_to_liquidation, 1),
+        "Price at Liquidation": liquidation_price
     })
 
-# Create DataFrame and rank
+# Convert to DataFrame and format
 df = pd.DataFrame(results)
 df["Rank"] = df["Health Score"].rank(ascending=False).astype(int)
+df["USDC Loan"] = df["USDC Loan"].apply(lambda x: f"${x:,.2f}")
+df["% to Liquidation"] = df["% to Liquidation"].apply(lambda x: f"{x:.1f}%")
+df["Price at Liquidation"] = df["Price at Liquidation"].apply(lambda x: f"${x:,.2f}")
 
 # Reorder columns
 df = df[["LTV Loop 2 (%)", "USDC Loan", "Health Score", "% to Liquidation", "Price at Liquidation", "Rank"]]
 
-# --- Final Display ---
-st.table(df)  # Fully rendered, no scrollbars
+# --- Display as interactive, scroll-free table ---
+st.data_editor(
+    df,
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "LTV Loop 2 (%)": st.column_config.NumberColumn("LTV Loop 2 (%)", format="%d"),
+        "USDC Loan": st.column_config.TextColumn("USDC Loan"),
+        "Health Score": st.column_config.NumberColumn("Health Score", format="%.2f"),
+        "% to Liquidation": st.column_config.TextColumn("% to Liquidation"),
+        "Price at Liquidation": st.column_config.TextColumn("Price at Liquidation"),
+        "Rank": st.column_config.NumberColumn("Rank", format="%d"),
+    },
+    disabled=True
+)
