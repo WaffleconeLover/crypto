@@ -1,4 +1,4 @@
-# LP Exit Planner - Supports Direct Uniswap LP URL Lookup
+# LP Exit Planner - Supports Hex Conversion for LP Position IDs
 import streamlit as st
 import pandas as pd
 import requests
@@ -12,8 +12,8 @@ SUBGRAPH_URLS = {
     "arbitrum": "https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-arbitrum-one"
 }
 
-# --- LP Fetch by Position ID ---
-def fetch_uniswap_v3_position_by_id(position_id, network):
+# --- LP Fetch by Hex Position ID ---
+def fetch_uniswap_v3_position_by_id(position_id_hex, network):
     url = SUBGRAPH_URLS.get(network)
     if not url:
         return {}
@@ -36,10 +36,15 @@ def fetch_uniswap_v3_position_by_id(position_id, network):
         tickUpper { tickIdx }
       }
     }
-    """ % position_id
+    """ % position_id_hex
 
     response = requests.post(url, json={"query": query})
     return response.json()
+
+# --- Convert numeric ID to hex padded string ---
+def convert_to_hex_position_id(position_id):
+    hex_str = hex(int(position_id))[2:].zfill(64)
+    return f"0x{hex_str}"
 
 # --- Moralis ETH Balance Fetch ---
 def get_eth_balance(wallet_address, moralis_api_key):
@@ -106,7 +111,8 @@ else:
 
 # --- Display LP Info ---
 if position_id and network:
-    lp_data = fetch_uniswap_v3_position_by_id(position_id, network)
+    position_id_hex = convert_to_hex_position_id(position_id)
+    lp_data = fetch_uniswap_v3_position_by_id(position_id_hex, network)
     if "data" in lp_data and "position" in lp_data["data"] and lp_data["data"]["position"]:
         pos = lp_data["data"]["position"]
         pool = pos["pool"]
