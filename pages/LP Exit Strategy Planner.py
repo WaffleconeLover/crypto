@@ -1,4 +1,4 @@
-# LP Exit Planner - Revert to Wallet-Based LP Fetching
+# LP Exit Planner - Wallet LP Dropdown + Auto-fill Bounds
 import streamlit as st
 import pandas as pd
 import requests
@@ -12,7 +12,7 @@ SUBGRAPH_URLS = {
     "arbitrum": "https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-arbitrum-one"
 }
 
-# --- LP Fetch for All Wallet Positions ---
+# --- LP Fetch for Wallet Positions ---
 def fetch_uniswap_v3_positions(wallet_address, network):
     url = SUBGRAPH_URLS.get(network)
     if not url:
@@ -41,6 +41,10 @@ def fetch_uniswap_v3_positions(wallet_address, network):
     response = requests.post(url, json={"query": query})
     return response.json()
 
+# --- Tick to Price conversion (approx) ---
+def tick_to_price(tick):
+    return 1.0001 ** tick
+
 # --- Moralis ETH Balance Fetch ---
 def get_eth_balance(wallet_address, moralis_api_key):
     headers = {
@@ -68,18 +72,39 @@ if "eth_price" not in st.session_state:
 
 current_price = st.session_state.eth_price
 
-# --- Inputs ---
-lp_low = st.number_input("Your LP Lower Bound ($)", value=2300.0)
-lp_high = st.number_input("Your LP Upper Bound ($)", value=2500.0)
-fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
-loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.00, step=50.00)
-
-# --- LP Data Integration Scaffold ---
+# --- LP Data Integration ---
 st.subheader("🔗 LP Live Data Integration (Optional)")
 wallet_address = st.text_input("Wallet Address for LP Tracking")
 network = st.selectbox("Select Network", ["ethereum", "arbitrum"], index=1)
 moralis_key = st.text_input("Paste your Moralis API Key", type="password")
 
+# --- Fetch LPs and let user choose ---
+selected_position = None
+positions = []
+position_choice = None
+
+if wallet_address:
+    lp_data = fetch_uniswap_v3_positions(wallet_address, network)
+    positions = lp_data.get("data", {}).get("positions", [])
+
+    if positions:
+        lp_options = [f"{p['pool']['token0']['symbol']}/{p['pool']['token1']['symbol']} - Fee: {int(p['pool']['feeTier']) / 10000:.2%} (ID {p['id']})" for p in positions]
+        choice = st.selectbox("Select a Position to Pre-fill", lp_options)
+        selected_position = positions[lp_options.index(choice)]
+        ticks = selected_position["tickLower"]["tickIdx"], selected_position["tickUpper"]["tickIdx"]
+        lp_low = tick_to_price(int(ticks[0])) * current_price
+        lp_high = tick_to_price(int(ticks[1])) * current_price
+        st.success(f"Auto-filled LP Bounds: ${lp_low:.2f} to ${lp_high:.2f}")
+    else:
+        st.warning("No LP positions found or failed to fetch.")
+
+# --- ETH Price Inputs ---
+lp_low = st.number_input("Your LP Lower Bound ($)", value=round(lp_low if 'lp_low' in locals() else 2300.0, 2))
+lp_high = st.number_input("Your LP Upper Bound ($)", value=round(lp_high if 'lp_high' in locals() else 2500.0, 2))
+fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
+loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.00, step=50.00)
+
+# --- ETH Balance ---
 use_live_eth = False
 eth_live = None
 if wallet_address and moralis_key:
@@ -90,29 +115,12 @@ if wallet_address and moralis_key:
     else:
         st.error("Failed to fetch ETH balance from Moralis.")
 
-# --- ETH Stack Input ---
 if use_live_eth and eth_live is not None:
     eth_stack = eth_live
 else:
     eth_stack = st.number_input("Current ETH Stack", value=8.75, step=0.01)
 
-# --- Display Wallet LPs ---
-if wallet_address:
-    lp_data = fetch_uniswap_v3_positions(wallet_address, network)
-    positions = lp_data.get("data", {}).get("positions", [])
-    if positions:
-        st.subheader(f"📊 LP Positions on {network.capitalize()}")
-        for i, pos in enumerate(positions):
-            pool = pos["pool"]
-            st.markdown(f"**Position {i+1}: {pool['token0']['symbol']} / {pool['token1']['symbol']}**")
-            st.markdown(f"- Liquidity: {pos['liquidity']}")
-            st.markdown(f"- Fee Tier: {int(pool['feeTier']) / 10000:.2%}")
-            st.markdown(f"- Tick Range: {pos['tickLower']['tickIdx']} to {pos['tickUpper']['tickIdx']}")
-            st.markdown("---")
-    else:
-        st.warning("No LP positions found or failed to fetch.")
-
-# --- Scenarios ---
+# --- Scenario Simulation ---
 st.subheader("Price Scenario Simulation")
 eth_scenario_price = st.slider("Simulate ETH Price ($)", min_value=1000, max_value=5000, value=int(current_price), step=50)
 collateral_usd = eth_stack * eth_scenario_price
@@ -129,10 +137,8 @@ else:
 
 # --- Outputs ---
 st.subheader("Guidance")
-
 if out_of_range == "in":
     st.success("✅ Your LP is currently in range. Let it continue accumulating fees.")
-
 elif out_of_range == "above":
     st.markdown(f"Price is **{(current_price - lp_high) / lp_high:.1%} above** your LP range.")
     st.markdown(f"You've earned **{fees_earned_eth:.2f} ETH** in fees.")
@@ -141,7 +147,6 @@ elif out_of_range == "above":
         st.success(f"✅ You can fully repay Loop 2 with fees and retain **{net_eth:.2f} ETH**.")
     else:
         st.warning(f"⚠️ You are short **{abs(net_eth):.2f} ETH** to repay Loop 2. Consider partial repay or wait for more fees.")
-
 elif out_of_range == "below":
     eth_needed = loop2_debt_usd / eth_scenario_price
     if eth_needed <= eth_stack:
