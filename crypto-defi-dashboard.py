@@ -69,7 +69,7 @@ with st.expander("Manual Loop 1 Setup", expanded=True):
 
     st.session_state.loop1_health_score = round(loop1_health, 2)
 
-    st.markdown(f"**Debt After Loop 1 ($):** ${loop1_debt:,.2f}")
+    st.markdown(f"**Debt After Loop 1:**  ${loop1_debt:,.2f}")
     st.markdown(f"**ETH Stack After Loop 1:** {eth_after_loop1:.2f}")
     st.markdown(f"**Loop 1 Health Score:** {loop1_health:.2f}")
 
