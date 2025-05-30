@@ -57,7 +57,7 @@ for second_ltv in second_ltv_range:
     loop2_debt = (eth_stack * eth_price) * (second_ltv / 100)
     total_debt = loop1_debt + loop2_debt
     total_eth = eth_stack + (loop2_debt / eth_price)
-    health_score = (eth_stack * eth_price * 0.825) / total_debt if total_debt else np.nan
+    health_score = (total_eth * eth_price * 0.825) / total_debt if total_debt else np.nan
     final_value = total_eth * eth_price
 
     if health_score >= 1.6:
@@ -73,34 +73,31 @@ for second_ltv in second_ltv_range:
 
 heatmap_df = pd.DataFrame(data)
 
+# ---- Label assignment ----
+heatmap_df["Label"] = heatmap_df.apply(
+    lambda row: f"{row['Final Health Score']:.2f}\n${row['Final Value']:,.0f}\n{row['% LTV']}\n{row['ETH']} ETH"
+    if row["Final Health Score"] >= 1.6 else "", axis=1
+)
+
+# ---- Grid visualization ----
 if not heatmap_df.empty:
-    # ---- Label assignment (safe) ----
-    heatmap_df["Label"] = heatmap_df.apply(
-        lambda row: f"{row['Final Health Score']:.2f}\n${row['Final Value']:,.0f}\n{row['% LTV']}\n{row['ETH']} ETH",
-        axis=1
+    pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
+    pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
+
+    fig, ax = plt.subplots(figsize=(6, 14))
+    sns.heatmap(
+        pivot_hs,
+        annot=pivot_labels,
+        fmt="",
+        cmap="RdYlGn",
+        cbar_kws={'label': 'Final Health Score'},
+        annot_kws={'fontsize': 7},
+        ax=ax
     )
-
-    # ---- Grid visualization ----
-    try:
-        pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
-        pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
-
-        fig, ax = plt.subplots(figsize=(6, 14))
-        sns.heatmap(
-            pivot_hs,
-            annot=pivot_labels,
-            fmt="",
-            cmap="RdYlGn",
-            cbar_kws={'label': 'Final Health Score'},
-            annot_kws={'fontsize': 7},
-            ax=ax
-        )
-        plt.title("Top ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
-        plt.xlabel("First Loop LTV (%)")
-        plt.ylabel("Second LTV (%)")
-        st.pyplot(fig)
-    except Exception as e:
-        st.error(f"Grid rendering error: {e}")
+    plt.title("Top ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
+    plt.xlabel("First Loop LTV (%)")
+    plt.ylabel("Second Loop LTV (%)")
+    st.pyplot(fig)
 else:
     st.warning("No Loop 2 options meet the minimum health score of 1.6. Adjust LTV or ETH collateral.")
 
