@@ -1,4 +1,4 @@
-# LP Exit Planner - Wallet LP Dropdown + Auto-fill Bounds
+# LP Exit Planner - Re-enabling LP URL Input for Delegated Positions
 import streamlit as st
 import pandas as pd
 import requests
@@ -6,21 +6,22 @@ import re
 
 st.header("Step 4: LP Exit Planner")
 
-# --- Subgraph Mapping ---
 SUBGRAPH_URLS = {
     "ethereum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
     "arbitrum": "https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-arbitrum-one"
 }
 
-# --- LP Fetch for Wallet Positions ---
-def fetch_uniswap_v3_positions(wallet_address, network):
-    url = SUBGRAPH_URLS.get(network)
-    if not url:
-        return {}
+# Convert numeric ID to hex string
+def convert_to_hex_position_id(position_id):
+    hex_str = hex(int(position_id))[2:].zfill(64)
+    return f"0x{hex_str}"
 
+# GraphQL fetch by hex ID
+def fetch_position_by_id(position_id_hex, network):
+    url = SUBGRAPH_URLS.get(network)
     query = """
     {
-      positions(where: { owner: \"%s\" }) {
+      position(id: \"%s\") {
         id
         liquidity
         depositedToken0
@@ -36,129 +37,103 @@ def fetch_uniswap_v3_positions(wallet_address, network):
         tickUpper { tickIdx }
       }
     }
-    """ % wallet_address.lower()
-
+    """ % position_id_hex
     response = requests.post(url, json={"query": query})
     return response.json()
 
-# --- Tick to Price conversion (approx) ---
+# Approximate price from tick
 def tick_to_price(tick):
-    return 1.0001 ** tick
+    return 1.0001 ** int(tick)
 
-# --- Moralis ETH Balance Fetch ---
+# Fetch ETH balance
 def get_eth_balance(wallet_address, moralis_api_key):
-    headers = {
-        "accept": "application/json",
-        "X-API-Key": moralis_api_key
-    }
+    headers = {"accept": "application/json", "X-API-Key": moralis_api_key}
     url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/balance?chain=eth"
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        balance_wei = int(response.json()["balance"])
-        return balance_wei / 1e18
-    else:
-        return None
+    r = requests.get(url, headers=headers)
+    return int(r.json()["balance"]) / 1e18 if r.status_code == 200 else None
 
-# --- ETH Price Fallback ---
-def fetch_eth_price():
-    try:
-        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
-        return r.json()["ethereum"]["usd"]
-    except:
-        return 2578.00
-
+# Fetch ETH price
 if "eth_price" not in st.session_state:
-    st.session_state.eth_price = fetch_eth_price()
+    try:
+        price_data = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").json()
+        st.session_state.eth_price = price_data["ethereum"]["usd"]
+    except:
+        st.session_state.eth_price = 2578
 
 current_price = st.session_state.eth_price
 
-# --- LP Data Integration ---
 st.subheader("🔗 LP Live Data Integration (Optional)")
-wallet_address = st.text_input("Wallet Address for LP Tracking")
-network = st.selectbox("Select Network", ["ethereum", "arbitrum"], index=1)
+lp_url = st.text_input("Paste Uniswap LP Position URL")
 moralis_key = st.text_input("Paste your Moralis API Key", type="password")
+wallet_address = st.text_input("Wallet Address (optional for ETH tracking)")
+network = st.selectbox("Network", ["ethereum", "arbitrum"], index=1)
 
-# --- Fetch LPs and let user choose ---
-selected_position = None
-positions = []
-position_choice = None
-
-if wallet_address:
-    lp_data = fetch_uniswap_v3_positions(wallet_address, network)
-    positions = lp_data.get("data", {}).get("positions", [])
-
-    if positions:
-        lp_options = [f"{p['pool']['token0']['symbol']}/{p['pool']['token1']['symbol']} - Fee: {int(p['pool']['feeTier']) / 10000:.2%} (ID {p['id']})" for p in positions]
-        choice = st.selectbox("Select a Position to Pre-fill", lp_options)
-        selected_position = positions[lp_options.index(choice)]
-        ticks = selected_position["tickLower"]["tickIdx"], selected_position["tickUpper"]["tickIdx"]
-        lp_low = tick_to_price(int(ticks[0])) * current_price
-        lp_high = tick_to_price(int(ticks[1])) * current_price
-        st.success(f"Auto-filled LP Bounds: ${lp_low:.2f} to ${lp_high:.2f}")
-    else:
-        st.warning("No LP positions found or failed to fetch.")
-
-# --- ETH Price Inputs ---
-lp_low = st.number_input("Your LP Lower Bound ($)", value=round(lp_low if 'lp_low' in locals() else 2300.0, 2))
-lp_high = st.number_input("Your LP Upper Bound ($)", value=round(lp_high if 'lp_high' in locals() else 2500.0, 2))
-fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
-loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.00, step=50.00)
-
-# --- ETH Balance ---
 use_live_eth = False
 eth_live = None
 if wallet_address and moralis_key:
     eth_live = get_eth_balance(wallet_address, moralis_key)
-    if eth_live is not None:
+    if eth_live:
         st.success(f"Live ETH Balance: {eth_live:.4f} ETH")
         use_live_eth = st.checkbox("Use live ETH balance to auto-fill stack", value=False)
-    else:
-        st.error("Failed to fetch ETH balance from Moralis.")
 
-if use_live_eth and eth_live is not None:
-    eth_stack = eth_live
-else:
-    eth_stack = st.number_input("Current ETH Stack", value=8.75, step=0.01)
+position_id = None
+if "uniswap.org/positions/v3" in lp_url:
+    match = re.search(r"uniswap.org/positions/v3/([^/]+)/([0-9]+)", lp_url)
+    if match:
+        network_from_url = match.group(1).lower()
+        position_id = match.group(2)
+        position_id_hex = convert_to_hex_position_id(position_id)
+        data = fetch_position_by_id(position_id_hex, network_from_url)
+        pos = data.get("data", {}).get("position")
+        if pos:
+            token0 = pos["pool"]["token0"]["symbol"]
+            token1 = pos["pool"]["token1"]["symbol"]
+            tick_low = int(pos["tickLower"]["tickIdx"])
+            tick_high = int(pos["tickUpper"]["tickIdx"])
+            lp_low = round(tick_to_price(tick_low) * current_price, 2)
+            lp_high = round(tick_to_price(tick_high) * current_price, 2)
+            st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
+        else:
+            st.warning("LP position not found or failed to fetch.")
 
-# --- Scenario Simulation ---
+lp_low = st.number_input("Your LP Lower Bound ($)", value=lp_low if 'lp_low' in locals() else 2300.0)
+lp_high = st.number_input("Your LP Upper Bound ($)", value=lp_high if 'lp_high' in locals() else 2500.0)
+fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
+loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.0, step=50.0)
+
+eth_stack = eth_live if use_live_eth and eth_live else st.number_input("Current ETH Stack", value=8.75, step=0.01)
+
 st.subheader("Price Scenario Simulation")
-eth_scenario_price = st.slider("Simulate ETH Price ($)", min_value=1000, max_value=5000, value=int(current_price), step=50)
+eth_scenario_price = st.slider("Simulate ETH Price ($)", 1000, 5000, int(current_price), step=50)
 collateral_usd = eth_stack * eth_scenario_price
 repayable_eth = loop2_debt_usd / eth_scenario_price
 net_eth = fees_earned_eth - repayable_eth
 
-# --- LP Range Check ---
 if current_price > lp_high:
-    out_of_range = "above"
+    status = "above"
 elif current_price < lp_low:
-    out_of_range = "below"
+    status = "below"
 else:
-    out_of_range = "in"
+    status = "in"
 
-# --- Outputs ---
 st.subheader("Guidance")
-if out_of_range == "in":
+if status == "in":
     st.success("✅ Your LP is currently in range. Let it continue accumulating fees.")
-elif out_of_range == "above":
-    st.markdown(f"Price is **{(current_price - lp_high) / lp_high:.1%} above** your LP range.")
+elif status == "above":
+    st.markdown(f"Price is **{(current_price - lp_high)/lp_high:.1%} above** your LP range.")
     st.markdown(f"You've earned **{fees_earned_eth:.2f} ETH** in fees.")
-    st.markdown(f"Loop 2 debt is **${loop2_debt_usd:,.2f}**, or **{repayable_eth:.2f} ETH** at scenario price **${eth_scenario_price:,.2f}**.")
-    if net_eth > 0:
-        st.success(f"✅ You can fully repay Loop 2 with fees and retain **{net_eth:.2f} ETH**.")
-    else:
-        st.warning(f"⚠️ You are short **{abs(net_eth):.2f} ETH** to repay Loop 2. Consider partial repay or wait for more fees.")
-elif out_of_range == "below":
-    eth_needed = loop2_debt_usd / eth_scenario_price
-    if eth_needed <= eth_stack:
-        st.warning(f"🟡 Your LP is fully in ETH. You can repay Loop 2 with **{eth_needed:.2f} ETH**, leaving **{eth_stack - eth_needed:.2f} ETH**.")
+    st.markdown(f"Loop 2 debt = **${loop2_debt_usd:,.2f}** = **{repayable_eth:.2f} ETH** at **${eth_scenario_price}**.")
+    st.warning(f"⚠️ You are short **{abs(net_eth):.2f} ETH** to repay Loop 2.")
+elif status == "below":
+    needed = loop2_debt_usd / eth_scenario_price
+    if needed <= eth_stack:
+        st.success(f"You can repay Loop 2 with **{needed:.2f} ETH**, keeping **{eth_stack - needed:.2f} ETH**.")
     else:
         recovery_price = loop2_debt_usd / eth_stack
-        st.error(f"🔴 Your ETH is worth **${collateral_usd:,.2f}**, but Loop 2 debt is **${loop2_debt_usd:,.2f}**.")
-        st.markdown(f"You need ETH to rise to **${recovery_price:,.2f}** to repay Loop 2.")
+        st.error(f"You need ETH to reach **${recovery_price:,.2f}** to repay Loop 2.")
 
-# --- Summary Table ---
 st.subheader("P&L Summary")
-data = {
+st.dataframe(pd.DataFrame({
     "Scenario Price ($)": [eth_scenario_price],
     "ETH Stack": [eth_stack],
     "Collateral Value ($)": [collateral_usd],
@@ -166,5 +141,4 @@ data = {
     "Debt in ETH": [repayable_eth],
     "Fees Earned (ETH)": [fees_earned_eth],
     "Net ETH After Repay": [net_eth]
-}
-st.dataframe(pd.DataFrame(data))
+}))
