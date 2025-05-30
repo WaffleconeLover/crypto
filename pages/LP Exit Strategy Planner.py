@@ -1,8 +1,33 @@
 # LP Exit Planner - Phase 1 Expansion + LP Integration Scaffold
 import streamlit as st
 import pandas as pd
+import requests
 
 st.header("Step 4: LP Exit Planner")
+
+# --- LP Fetch Function ---
+def fetch_uniswap_v3_positions(wallet):
+    url = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3"
+    query = """
+    {
+      positions(where: { owner: \"%s\" }) {
+        id
+        liquidity
+        depositedToken0
+        depositedToken1
+        pool {
+          token0 { symbol decimals }
+          token1 { symbol decimals }
+          feeTier
+        }
+        tickLower { tickIdx }
+        tickUpper { tickIdx }
+      }
+    }
+    """ % wallet.lower()
+
+    response = requests.post(url, json={"query": query})
+    return response.json()
 
 # --- Inputs ---
 lp_low = st.number_input("Your LP Lower Bound ($)", value=2300.0)
@@ -18,13 +43,20 @@ st.subheader("🔗 LP Live Data Integration (Optional)")
 wallet_address = st.text_input("Enter Wallet Address for LP Tracking")
 platform = st.selectbox("Select LP Platform", ["Uniswap V3", "Metrix", "Other"], index=0)
 
-if wallet_address:
-    st.info("Live data fetch not yet implemented. This will eventually pull LP position details such as:")
-    st.markdown("- Pool token pair (e.g., WETH/ARB)")
-    st.markdown("- Range bounds (min/max)")
-    st.markdown("- Current liquidity, share of pool")
-    st.markdown("- Unclaimed fees")
-    st.markdown("- In-range % and price")
+if wallet_address and platform == "Uniswap V3":
+    lp_data = fetch_uniswap_v3_positions(wallet_address)
+
+    if "data" in lp_data and "positions" in lp_data["data"]:
+        st.subheader("📊 LP Positions Found")
+        for i, position in enumerate(lp_data["data"]["positions"]):
+            pool = position["pool"]
+            st.markdown(f"**Position {i+1}: {pool['token0']['symbol']} / {pool['token1']['symbol']}**")
+            st.markdown(f"- Liquidity: {position['liquidity']}")
+            st.markdown(f"- Fee Tier: {int(pool['feeTier']) / 10000:.2%}")
+            st.markdown(f"- Tick Range: {position['tickLower']['tickIdx']} to {position['tickUpper']['tickIdx']}")
+            st.markdown("---")
+    else:
+        st.warning("No LP positions found or failed to fetch.")
 
 # --- Scenarios ---
 st.subheader("Price Scenario Simulation")
