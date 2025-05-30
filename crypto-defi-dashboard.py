@@ -1,52 +1,92 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide")
-st.title("ETH Looping Dashboard")
+st.title("ETH Leverage Strategy Dashboard")
 
-# --- Loop 1 Inputs ---
+# --- Session State Setup ---
+if "eth_price" not in st.session_state:
+    st.session_state.eth_price = 3500.00  # default fallback price
+if "collateral_eth" not in st.session_state:
+    st.session_state.collateral_eth = 6.73  # default ETH collateral
+
+# --- Reset Button ---
+if st.button("🔄 Reset All"):
+    st.session_state.eth_price = 3500.00
+    st.session_state.collateral_eth = 6.73
+    st.experimental_rerun()
+
+# --- Input Section ---
 st.header("Loop 1 Setup")
-eth_price = st.number_input("ETH Price (live or manual)", value=2500.0, min_value=100.0, max_value=10000.0, step=10.0)
-eth_collateral = st.number_input("ETH Collateral", value=6.73, min_value=0.0, step=0.01)
-ltv_1 = st.slider("Target LTV for Loop 1", min_value=30.0, max_value=68.0, value=40.0, step=0.5)
+
+eth_price = st.number_input("Current ETH Price ($)", min_value=500.0, max_value=10000.0,
+                            value=st.session_state.eth_price, step=10.0)
+st.session_state.eth_price = eth_price
+
+collateral_eth = st.number_input("Current ETH Collateral", min_value=0.0,
+                                 value=st.session_state.collateral_eth, step=0.1)
+st.session_state.collateral_eth = collateral_eth
+
+ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=30, max_value=60, value=40, step=1)
 
 # --- Loop 1 Calculations ---
-debt_1 = eth_collateral * eth_price * ltv_1 / 100
-eth_gained_1 = debt_1 / eth_price
-eth_stack_1 = eth_collateral + eth_gained_1
-health_score_1 = eth_stack_1 * eth_price / debt_1 if debt_1 else 0
+collateral_usd = collateral_eth * eth_price
+loop1_debt = (ltv1 / 100) * collateral_usd
+eth_gained = loop1_debt / eth_price
+eth_stack = collateral_eth + eth_gained
+loop1_health_score = collateral_usd / loop1_debt if loop1_debt else np.inf
 
-st.markdown(f"**Debt After Loop 1:** ${debt_1:,.2f}")
-st.markdown(f"**ETH Gained After Loop 1:** {eth_gained_1:.2f}")
-st.markdown(f"**ETH Stack After Loop 1:** {eth_stack_1:.2f}")
-st.markdown(f"**Loop 1 Health Score:** {health_score_1:.2f}")
+st.subheader("Loop 1 Results")
+st.markdown(f"**Debt After Loop 1:**  ${loop1_debt:,.2f}")
+st.markdown(f"**ETH Gained After Loop 1:**  {eth_gained:,.2f}")
+st.markdown(f"**ETH Stack After Loop 1:**  {eth_stack:,.2f}")
+st.markdown(f"**Loop 1 Health Score:**  {loop1_health_score:.2f}")
 
-# --- Loop 2 Grid ---
-st.header("Loop 2 Grid")
-ltv_2_range = np.arange(30, 51, 1)
-health_scores = []
-
-for ltv_2 in ltv_2_range:
-    debt_2 = eth_stack_1 * eth_price * ltv_2 / 100
-    health_score_2 = eth_stack_1 * eth_price / debt_2 if debt_2 else 0
-    liquidation_price = (1 - ltv_2 / 100) * eth_price
-    to_liquidation = 100 * (eth_price - liquidation_price) / eth_price
-    health_scores.append({
-        "Second Loop LTV (%)": ltv_2,
-        "Final Health Score": round(health_score_2, 2),
-        "USDC Loan": f"${debt_2:,.0f}",
-        "% to Liquidation": f"{to_liquidation:.0f}%",
-        "Liquidation Price": f"${liquidation_price:,.0f}"
-    })
-
-heatmap_df = pd.DataFrame(health_scores)
-filtered_df = heatmap_df[heatmap_df["Final Health Score"] >= 1.6]
-
-if filtered_df.empty:
-    st.warning("No Loop 2 options meet the minimum health score of 1.6. Adjust LTV or ETH collateral.")
+# --- Loop 2 Simulation (Only show if Loop 1 health score is healthy) ---
+if loop1_health_score < 1.6:
+    st.warning("Loop 1 Health Score is too low. Adjust LTV or collateral.")
 else:
-    st.dataframe(filtered_df.reset_index(drop=True), use_container_width=True)
+    st.header("Loop 2 Simulation")
 
-st.button("Reset Inputs", on_click=lambda: st.experimental_rerun())
+    results = []
+    for ltv2 in range(30, 51):
+        loop2_debt = (ltv2 / 100) * eth_stack * eth_price
+        total_debt = loop1_debt + loop2_debt
+        liquidation_price = (total_debt / eth_stack) * 0.9  # Example logic
+        health_score = (eth_stack * eth_price) / total_debt if total_debt else np.inf
+        pct_to_liquidation = (1 - liquidation_price / eth_price) * 100
+
+        if health_score >= 1.6:
+            results.append({
+                "LTV Loop 2 (%)": ltv2,
+                "USDC Loan": loop2_debt,
+                "Health Score": health_score,
+                "% to Liquidation": pct_to_liquidation,
+                "Price at Liquidation": liquidation_price
+            })
+
+    if not results:
+        st.warning("No viable Loop 2 options found with current settings.")
+    else:
+        df = pd.DataFrame(results)
+        df["Score"] = df["Health Score"] * 1.5 + df["% to Liquidation"] * 1.2 + df["USDC Loan"] / 1000
+        df["Rank"] = df["Score"].rank(ascending=False).astype(int)
+        df = df.sort_values("Rank")
+
+        # --- Style Function ---
+        def style_loop2_table(df):
+            return df.style \
+                .background_gradient(subset=["Health Score"], cmap="RdYlGn") \
+                .background_gradient(subset=["% to Liquidation"], cmap="YlGnBu") \
+                .background_gradient(subset=["USDC Loan"], cmap="Blues") \
+                .highlight_min(subset=["Rank"], color="lightyellow") \
+                .format({
+                    "USDC Loan": "${:,.2f}",
+                    "Health Score": "{:.2f}",
+                    "% to Liquidation": "{:.1f}%",
+                    "Price at Liquidation": "${:,.2f}"
+                })
+
+        styled_df = style_loop2_table(df.drop(columns=["Score"]).reset_index(drop=True))
+        st.dataframe(styled_df, use_container_width=True)
