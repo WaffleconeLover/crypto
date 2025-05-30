@@ -4,3 +4,4 @@ numpy
 matplotlib
 seaborn
 yfinance
+web3==6.10.0
