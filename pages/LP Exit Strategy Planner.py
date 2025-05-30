@@ -88,8 +88,13 @@ if match:
         tick_high = pos[6]
 
         invert_price = True  # ARB/WETH → show ARB per 1 WETH
-        lp_low = round(tick_to_price(tick_low, invert=invert_price), 2)
-        lp_high = round(tick_to_price(tick_high, invert=invert_price), 2)
+        def tick_to_price_precise(tick, decimals_token0=18, decimals_token1=18):
+            sqrt_price = 1.0001 ** (tick / 2)
+            price = (sqrt_price ** 2) * (10 ** (decimals_token0 - decimals_token1))
+            return 1 / price if invert_price else price
+        lp_low = round(tick_to_price_precise(tick_low), 2)
+        lp_high = round(tick_to_price_precise(tick_high), 2)
+
         st.success(f"Loaded LP: token0 = {token0[-4:]}, token1 = {token1[-4:]}, fee = {fee}, range: {lp_low:,}—{lp_high:,}")
     except Exception as e:
         st.warning("LP position not found or failed to fetch.")
