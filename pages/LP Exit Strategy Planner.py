@@ -1,4 +1,4 @@
-# LP Exit Planner - Phase 1 Expansion
+# LP Exit Planner - Phase 1 Expansion + LP Integration Scaffold
 import streamlit as st
 import pandas as pd
 
@@ -12,6 +12,19 @@ current_price = st.session_state.eth_price
 fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
 loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.00, step=50.00)
 eth_stack = st.number_input("Current ETH Stack", value=8.75, step=0.01)
+
+# --- LP Data Integration Scaffold ---
+st.subheader("🔗 LP Live Data Integration (Optional)")
+wallet_address = st.text_input("Enter Wallet Address for LP Tracking")
+platform = st.selectbox("Select LP Platform", ["Uniswap V3", "Metrix", "Other"], index=0)
+
+if wallet_address:
+    st.info("Live data fetch not yet implemented. This will eventually pull LP position details such as:")
+    st.markdown("- Pool token pair (e.g., WETH/ARB)")
+    st.markdown("- Range bounds (min/max)")
+    st.markdown("- Current liquidity, share of pool")
+    st.markdown("- Unclaimed fees")
+    st.markdown("- In-range % and price")
 
 # --- Scenarios ---
 st.subheader("Price Scenario Simulation")
