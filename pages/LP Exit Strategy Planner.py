@@ -1,4 +1,4 @@
-# LP Exit Planner - Phase 1 Expansion + LP Integration Scaffold + Moralis ETH Balance
+# LP Exit Planner - Auto-Fill ETH Stack from Moralis
 import streamlit as st
 import pandas as pd
 import requests
@@ -61,7 +61,6 @@ lp_low = st.number_input("Your LP Lower Bound ($)", value=2300.0)
 lp_high = st.number_input("Your LP Upper Bound ($)", value=2500.0)
 fees_earned_eth = st.number_input("Estimated Fees Earned (ETH)", value=0.10, step=0.01)
 loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.00, step=50.00)
-eth_stack = st.number_input("Current ETH Stack", value=8.75, step=0.01)
 
 # --- LP Data Integration Scaffold ---
 st.subheader("🔗 LP Live Data Integration (Optional)")
@@ -69,27 +68,36 @@ wallet_address = st.text_input("Enter Wallet Address for LP Tracking")
 platform = st.selectbox("Select LP Platform", ["Uniswap V3", "Metrix", "Other"], index=0)
 moralis_key = st.text_input("Paste your Moralis API Key", type="password")
 
-if wallet_address:
-    if platform == "Uniswap V3":
-        lp_data = fetch_uniswap_v3_positions(wallet_address)
-        if "data" in lp_data and "positions" in lp_data["data"]:
-            st.subheader("📊 LP Positions Found")
-            for i, position in enumerate(lp_data["data"]["positions"]):
-                pool = position["pool"]
-                st.markdown(f"**Position {i+1}: {pool['token0']['symbol']} / {pool['token1']['symbol']}**")
-                st.markdown(f"- Liquidity: {position['liquidity']}")
-                st.markdown(f"- Fee Tier: {int(pool['feeTier']) / 10000:.2%}")
-                st.markdown(f"- Tick Range: {position['tickLower']['tickIdx']} to {position['tickUpper']['tickIdx']}")
-                st.markdown("---")
-        else:
-            st.warning("No LP positions found or failed to fetch.")
+use_live_eth = False
+eth_live = None
+if wallet_address and moralis_key:
+    eth_live = get_eth_balance(wallet_address, moralis_key)
+    if eth_live is not None:
+        st.success(f"Live ETH Balance: {eth_live:.4f} ETH")
+        use_live_eth = st.checkbox("Use live ETH balance to auto-fill stack", value=False)
+    else:
+        st.error("Failed to fetch ETH balance from Moralis.")
 
-    if moralis_key:
-        eth_live = get_eth_balance(wallet_address, moralis_key)
-        if eth_live is not None:
-            st.success(f"Live ETH Balance: {eth_live:.4f} ETH")
-        else:
-            st.error("Failed to fetch ETH balance from Moralis.")
+# --- ETH Stack Input ---
+if use_live_eth and eth_live is not None:
+    eth_stack = eth_live
+else:
+    eth_stack = st.number_input("Current ETH Stack", value=8.75, step=0.01)
+
+# --- Uniswap LP View ---
+if wallet_address and platform == "Uniswap V3":
+    lp_data = fetch_uniswap_v3_positions(wallet_address)
+    if "data" in lp_data and "positions" in lp_data["data"]:
+        st.subheader("📊 LP Positions Found")
+        for i, position in enumerate(lp_data["data"]["positions"]):
+            pool = position["pool"]
+            st.markdown(f"**Position {i+1}: {pool['token0']['symbol']} / {pool['token1']['symbol']}**")
+            st.markdown(f"- Liquidity: {position['liquidity']}")
+            st.markdown(f"- Fee Tier: {int(pool['feeTier']) / 10000:.2%}")
+            st.markdown(f"- Tick Range: {position['tickLower']['tickIdx']} to {position['tickUpper']['tickIdx']}")
+            st.markdown("---")
+    else:
+        st.warning("No LP positions found or failed to fetch.")
 
 # --- Scenarios ---
 st.subheader("Price Scenario Simulation")
