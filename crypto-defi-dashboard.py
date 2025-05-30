@@ -46,7 +46,7 @@ if eth_price_live:
     eth_price = eth_price_live
 else:
     st.warning("Unable to fetch live ETH price. Please enter it manually.")
-    eth_price = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=float(st.session_state.eth_price_input), step=10.0)", min_value=100.0, max_value=10000.0, value=st.session_state.eth_price_input, step=10.0)
+    eth_price = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=float(st.session_state.eth_price_input), step=10.0)
     st.session_state.eth_price_input = eth_price
 
 # Input sliders
