@@ -56,7 +56,7 @@ st.session_state.eth_stack = eth_stack
 # Loop 1 setup
 st.markdown("### Manual Loop 1 Setup")
 loop1_eth = st.number_input("ETH Stack After Loop 1", min_value=0.0, value=st.session_state.loop1_eth, step=0.01)
-loop1_debt = st.number_input("Debt After Loop 1 ($)", min_value=0.0, value=st.session_state.loop1_debt, step=10.0)
+loop1_debt = st.number_input("Debt After Loop 1 ($, value=float(st.session_state.loop1_debt))", min_value=0.0, value=st.session_state.loop1_debt, step=10.0)
 st.session_state.loop1_eth = loop1_eth
 st.session_state.loop1_debt = loop1_debt
 
