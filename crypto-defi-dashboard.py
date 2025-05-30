@@ -56,15 +56,23 @@ st.header("Step 3: Loop 2 Evaluation")
 ltv2_range = range(30, 51)
 loop2_rows = []
 
-eth_stack_after_loop1 = eth_stack1  # 6.73 + ETH gained in Loop 1
-usdc_debt_after_loop1 = usdc_borrowed1
+# Corrected: Only use Loop 1 ETH collateral — do not add any ETH
+eth_collateral_loop1 = eth_stack1
+usdc_debt_loop1 = usdc_borrowed1
 
 for ltv2 in ltv2_range:
-    loop2_usdc = eth_stack_after_loop1 * eth_price * (ltv2 / 100)
-    total_debt = usdc_debt_after_loop1 + loop2_usdc
-    health_score = (eth_stack_after_loop1 * eth_price) / total_debt if total_debt > 0 else 999
+    # Calculate Loop 2 loan based on Loop 1 ETH collateral (unchanged)
+    loop2_usdc = eth_collateral_loop1 * eth_price * (ltv2 / 100)
+
+    # Total debt is now the Loop 1 + Loop 2 borrowings
+    total_debt = usdc_debt_loop1 + loop2_usdc
+
+    # Collateral value is fixed based on Loop 1 ETH
+    collateral_value = eth_collateral_loop1 * eth_price
+    health_score = collateral_value / total_debt if total_debt > 0 else float('inf')
+
     percent_to_liquidation = health_score / 1.0
-    liquidation_price = eth_price / percent_to_liquidation
+    liquidation_price = eth_price / percent_to_liquidation if percent_to_liquidation != 0 else 0
 
     loop2_rows.append({
         "LTV (%)": ltv2,
@@ -76,3 +84,4 @@ for ltv2 in ltv2_range:
 
 df_loop2 = pd.DataFrame(loop2_rows)
 st.dataframe(df_loop2, use_container_width=True)
+
