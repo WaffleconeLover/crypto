@@ -46,7 +46,7 @@ if eth_price_live:
     eth_price = eth_price_live
 else:
     st.warning("Unable to fetch live ETH price. Please enter it manually.")
-    eth_price = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=float(st.session_state.eth_price_input), step=10.0)
+    eth_price = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=float(st.session_state.eth_price_input), step=10.0)", min_value=100.0, max_value=10000.0, value=st.session_state.eth_price_input, step=10.0)
     st.session_state.eth_price_input = eth_price
 
 # Input sliders
@@ -56,7 +56,7 @@ st.session_state.eth_stack = eth_stack
 # Loop 1 setup
 st.markdown("### Manual Loop 1 Setup")
 loop1_eth = st.number_input("ETH Stack After Loop 1", min_value=0.0, value=st.session_state.loop1_eth, step=0.01)
-loop1_debt = st.number_input("Debt After Loop 1 ($)", min_value=0.0, value=float(st.session_state.loop1_debt), step=10.0))", min_value=0.0, value=st.session_state.loop1_debt, step=10.0)
+loop1_debt = st.number_input("Debt After Loop 1 ($)", min_value=0.0, value=float(st.session_state.loop1_debt), step=10.0)
 st.session_state.loop1_eth = loop1_eth
 st.session_state.loop1_debt = loop1_debt
 
@@ -125,39 +125,15 @@ def strip_zero(val):
 
 heatmap_df["Label"] = heatmap_df.apply(
     lambda row: (
-        f"{strip_zero(row['Final Health Score'])}\n"
-        f"${row['Loop 2 Debt']}\n"
-        f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
-        f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
-        f"#{int(row['Rank'])}"
-    ),
-    axis=1
-)}\n"
-        f"${row['Loop 2 Debt']}\n"
-        f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
-        f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
+        f"{strip_zero(row['Final Health Score'])}
+"
+        f"${row['Loop 2 Debt']}
+"
+        f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}
+"
+        f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)
+"
         f"#{int(row['Rank'])}"
     ),
     axis=1
 )
-
-# Pivot for display
-pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
-pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
-
-fig, ax = plt.subplots(figsize=(6, 14))
-sns.heatmap(
-    pivot_hs,
-    annot=pivot_labels,
-    fmt="",
-    cmap="RdYlGn",
-    cbar_kws={'label': 'Final Health Score'},
-    annot_kws={'fontsize': 7},
-    ax=ax
-)
-plt.title("Top ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
-plt.xlabel("First Loop LTV (%)")
-plt.ylabel("Second Loop LTV (%)")
-st.pyplot(fig)
-
-st.markdown("**Instructions:** Loop 1 is now manually set. Explore granular Loop 2 options with a minimum health score of 1.6.")
