@@ -1,4 +1,4 @@
-# LP Exit Planner - Fixed Uniswap URL Parsing for v3 and v4
+# LP Exit Planner - Fixed v3/v4 URL handling for Uniswap LPs
 import streamlit as st
 import pandas as pd
 import requests
@@ -11,48 +11,43 @@ SUBGRAPH_URLS = {
     "arbitrum": "https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-arbitrum-one"
 }
 
-# Convert numeric ID to hex string
 def convert_to_hex_position_id(position_id):
     hex_str = hex(int(position_id))[2:].zfill(64)
     return f"0x{hex_str}"
 
-# GraphQL fetch by hex ID
 def fetch_position_by_id(position_id_hex, network):
     url = SUBGRAPH_URLS.get(network)
-    query = """
-    {
-      position(id: \"%s\") {
+    query = f"""
+    {{
+      position(id: \"{position_id_hex}\") {{
         id
         liquidity
         depositedToken0
         depositedToken1
         collectedFeesToken0
         collectedFeesToken1
-        pool {
-          token0 { symbol decimals }
-          token1 { symbol decimals }
+        pool {{
+          token0 {{ symbol decimals }}
+          token1 {{ symbol decimals }}
           feeTier
-        }
-        tickLower { tickIdx }
-        tickUpper { tickIdx }
-      }
-    }
-    """ % position_id_hex
+        }}
+        tickLower {{ tickIdx }}
+        tickUpper {{ tickIdx }}
+      }}
+    }}
+    """
     response = requests.post(url, json={"query": query})
     return response.json()
 
-# Approximate price from tick
 def tick_to_price(tick):
     return 1.0001 ** int(tick)
 
-# Fetch ETH balance
 def get_eth_balance(wallet_address, moralis_api_key):
     headers = {"accept": "application/json", "X-API-Key": moralis_api_key}
     url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/balance?chain=eth"
     r = requests.get(url, headers=headers)
     return int(r.json()["balance"]) / 1e18 if r.status_code == 200 else None
 
-# Fetch ETH price
 if "eth_price" not in st.session_state:
     try:
         price_data = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").json()
@@ -77,24 +72,23 @@ if wallet_address and moralis_key:
         use_live_eth = st.checkbox("Use live ETH balance to auto-fill stack", value=False)
 
 position_id = None
-if "uniswap.org/positions/" in lp_url:
-    match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
-    if match:
-        network_from_url = match.group(1).lower()
-        position_id = match.group(2)
-        position_id_hex = convert_to_hex_position_id(position_id)
-        data = fetch_position_by_id(position_id_hex, network_from_url)
-        pos = data.get("data", {}).get("position")
-        if pos:
-            token0 = pos["pool"]["token0"]["symbol"]
-            token1 = pos["pool"]["token1"]["symbol"]
-            tick_low = int(pos["tickLower"]["tickIdx"])
-            tick_high = int(pos["tickUpper"]["tickIdx"])
-            lp_low = round(tick_to_price(tick_low) * current_price, 2)
-            lp_high = round(tick_to_price(tick_high) * current_price, 2)
-            st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
-        else:
-            st.warning("LP position not found or failed to fetch.")
+match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
+if match:
+    network_from_url = match.group(1).lower()
+    position_id = match.group(2)
+    position_id_hex = convert_to_hex_position_id(position_id)
+    data = fetch_position_by_id(position_id_hex, network_from_url)
+    pos = data.get("data", {}).get("position")
+    if pos:
+        token0 = pos["pool"]["token0"]["symbol"]
+        token1 = pos["pool"]["token1"]["symbol"]
+        tick_low = int(pos["tickLower"]["tickIdx"])
+        tick_high = int(pos["tickUpper"]["tickIdx"])
+        lp_low = round(tick_to_price(tick_low) * current_price, 2)
+        lp_high = round(tick_to_price(tick_high) * current_price, 2)
+        st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
+    else:
+        st.warning("LP position not found or failed to fetch.")
 
 lp_low = st.number_input("Your LP Lower Bound ($)", value=lp_low if 'lp_low' in locals() else 2300.0)
 lp_high = st.number_input("Your LP Upper Bound ($)", value=lp_high if 'lp_high' in locals() else 2500.0)
