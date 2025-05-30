@@ -5,30 +5,18 @@ import re
 
 st.header("Step 4: LP Exit Planner")
 
-# Pre-configured values (no input required)
+# --- Pre-filled values ---
 DEFAULT_GRAPH_KEY = "d997b56020107b5449f63d478635f9c6"
 DEFAULT_MORALIS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjgyMDNmNDlmLTMzOWMtNDc5YS04Y2U4LTM0YzI5M2IzODU3YyIsIm9yZ0lkIjoiNDMwOTg5IiwidXNlcklkIjoiNDQzMzM1IiwidHlwZUlkIjoiMmVlOTUxYjAtOTk4ZC00NjRmLWFmZTEtM2FlZDVlNjhhMzE3IiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3MzkzNzI3NTUsImV4cCI6NDg5NTEzMjc1NX0.8GWca9PdAXaJ5ReNTdCKnMQkQ3GdEGPOj67yTw19krM"
 DEFAULT_WALLET = "0xb4f25c81fb52d959616e3837cbc9e24a283b9df4"
 
-def get_arbitrum_subgraph_url(api_key):
-    return f"https://gateway.thegraph.com/api/{api_key}/subgraphs/name/uniswap/uniswap-v3-arbitrum"
-
 SUBGRAPH_URLS = {
-    "ethereum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
-    "arbitrum": None
+    "ethereum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3"
 }
 
-def fetch_position_by_id(position_id_str, network, api_key=None):
-    if network == "arbitrum":
-        if not api_key:
-            st.error("Arbitrum requires a valid Graph API key.")
-            return None
-        url = get_arbitrum_subgraph_url(api_key)
-        headers = {"Content-Type": "application/json"}
-    else:
-        url = SUBGRAPH_URLS[network]
-        headers = {"Content-Type": "application/json"}
-
+def fetch_position_eth(position_id_str, api_key):
+    url = SUBGRAPH_URLS["ethereum"]
+    headers = {"Content-Type": "application/json"}
     query = {
         "query": f"""
         {{
@@ -50,12 +38,34 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
         }}
         """
     }
-
     try:
         response = requests.post(url, headers=headers, json=query)
         return response.json()
     except Exception as e:
         return {"ERROR": {"message": str(e)}}
+
+def fetch_position_arbitrum(position_id, wallet_address, moralis_api_key):
+    headers = {
+        "X-API-Key": moralis_api_key,
+        "accept": "application/json"
+    }
+    url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/nft?chain=arbitrum&format=decimal"
+    r = requests.get(url, headers=headers)
+    if r.status_code != 200:
+        return {"ERROR": {"message": f"Failed to fetch from Moralis: {r.text}"}}
+    
+    try:
+        result = r.json()
+        for nft in result.get("result", []):
+            if nft.get("token_id") == position_id and "Uniswap V3 Positions NFT" in nft.get("name", ""):
+                metadata = nft.get("metadata")
+                if metadata and isinstance(metadata, str):
+                    import json
+                    metadata = json.loads(metadata)
+                return {"data": {"position": metadata}}
+        return {"data": {"position": None}}
+    except Exception as e:
+        return {"ERROR": {"message": f"Parsing error: {str(e)}"}}
 
 def tick_to_price(tick):
     return 1.0001 ** int(tick)
@@ -100,18 +110,20 @@ match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
 if match:
     network_from_url = match.group(1).lower()
     position_id = match.group(2)
-    position_id_str = str(position_id)
     selected_network = network_from_url if network_from_url in ["ethereum", "arbitrum"] else manual_network
-    response = fetch_position_by_id(position_id_str, selected_network, api_key=graph_key)
+
+    if selected_network == "ethereum":
+        response = fetch_position_eth(position_id, api_key=graph_key)
+    else:
+        response = fetch_position_arbitrum(position_id, wallet_address, moralis_key)
+
     pos = response.get("data", {}).get("position") if response else None
-    if pos:
-        token0 = pos["pool"]["token0"]["symbol"]
-        token1 = pos["pool"]["token1"]["symbol"]
+    if pos and "tickLower" in pos:
         tick_low = int(pos["tickLower"]["tickIdx"])
         tick_high = int(pos["tickUpper"]["tickIdx"])
         lp_low = round(tick_to_price(tick_low) * current_price, 2)
         lp_high = round(tick_to_price(tick_high) * current_price, 2)
-        st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
+        st.success(f"Loaded LP Range: ${lp_low} to ${lp_high}")
     else:
         st.warning("LP position not found or failed to fetch.")
         st.json(response)
