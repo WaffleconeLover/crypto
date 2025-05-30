@@ -27,6 +27,8 @@ if "eth_price" not in st.session_state:
 if st.button("Refresh ETH Price from CoinGecko"):
     st.session_state.eth_price = fetch_eth_price()
 
+st.header("Step 1: Fetch ETH Price")
+
 eth_price = st.session_state.eth_price
 st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 
