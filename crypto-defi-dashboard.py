@@ -47,7 +47,7 @@ st.markdown(f"- **Loop 1 Health Score:** {health_score_l1:.2f}")
 # --- Step 3: Loop 2 Evaluation ---
 st.header("Step 3: Loop 2 Evaluation")
 data = []
-for ltv2 in range(30, 51):
+for ltv2 in range(10, 50):
     usdc_loan_l2 = collateral_value_after_l1 * (ltv2 / 100)
     total_debt = usdc_loan_l1 + usdc_loan_l2
     health_score = (collateral_value_after_l1 * 0.8) / total_debt
