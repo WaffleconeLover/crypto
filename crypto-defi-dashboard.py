@@ -1,17 +1,19 @@
 import streamlit as st
 import requests
 import pandas as pd
+import numpy as np
+import datetime
 
 st.set_page_config(page_title="ETH Leverage Loop Simulator", layout="wide")
 st.title("ETH Leverage Loop Simulator")
 
-# --- Step 1: Fetch ETH price ---
+# --- Fetch ETH price from CoinGecko ---
 def fetch_eth_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
         return r.json()["ethereum"]["usd"]
     except:
-        return 2600.00  # fallback
+        return 2600.00
 
 if "eth_price" not in st.session_state:
     st.session_state.eth_price = fetch_eth_price()
@@ -22,21 +24,17 @@ if st.button("Refresh ETH Price from CoinGecko"):
 eth_price = st.session_state.eth_price
 st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 
-# --- Step 2: Configure Loop 1 ---
+# --- Configure Loop 1 ---
 st.header("Step 2: Configure Loop 1")
 initial_collateral_eth = st.number_input("Initial ETH Collateral", value=6.73, step=0.01)
 ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=10, max_value=58, value=30)
-
-# Optional: Volatility Lookback Window
 expected_lp_days = st.slider("Expected LP Duration (Days)", min_value=1, max_value=30, value=7)
 
-# Placeholder for volatility logic (won't error out if yfinance missing)
-def get_eth_volatility(days):
-    return None  # To be implemented later
-
-volatility = get_eth_volatility(expected_lp_days)
-if volatility:
-    st.markdown(f"**Estimated ETH Volatility (Annualized):** {volatility:.2%}")
+# --- Simulated Volatility Data (Replace with live data as needed) ---
+np.random.seed(0)
+mock_returns = np.random.normal(0, 0.02, 60)  # simulate 60 daily returns
+mock_prices = pd.Series(np.cumprod(1 + mock_returns) * eth_price)
+mock_volatility = mock_prices.pct_change().rolling(window=expected_lp_days).std().iloc[-1] * np.sqrt(365)
 
 # --- Loop 1 Calculations ---
 collateral_value_usd = initial_collateral_eth * eth_price
@@ -57,10 +55,10 @@ st.markdown(f"- **New Collateral After Loop 1:** ${new_collateral_usd:,.2f}")
 st.markdown(f"- **Loop 1 Health Score:** {loop1_health_score:.2f}")
 st.markdown(f"- **Loop 1 % to Liquidation:** {loop1_pct_to_liquidation:.1%}")
 st.markdown(f"- **Loop 1 Liquidation Price:** ${loop1_liquidation_price:,.2f}")
+st.markdown(f"- **Est. Annualized Volatility ({expected_lp_days}D Lookback):** {mock_volatility:.2%}")
 
 # --- Step 3: Loop 2 Simulation ---
 st.header("Step 3: Loop 2 Evaluation")
-
 ltv2_range = range(10, 50)
 loop2_data = []
 
@@ -79,7 +77,4 @@ for ltv2 in ltv2_range:
         "ETH Price at Liquidation": f"${price_at_liq:,.2f}"
     })
 
-df = pd.DataFrame(loop2_data)
-
-# --- Sortable Table ---
-st.dataframe(df, use_container_width=True)
+st.dataframe(pd.DataFrame(loop2_data), use_container_width=True)
