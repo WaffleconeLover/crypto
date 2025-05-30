@@ -86,12 +86,17 @@ st.markdown(f"- **Market Behavior:** {vol_category}")
 
 # --- Volatility Chart ---
 st.subheader("Volatility Trend")
-fig, ax1 = plt.subplots()
+fig, ax1 = plt.subplots(figsize=(10, 4))  # Smaller width and height
+
 ax1.plot(price_series.index, price_series.values, label="ETH Price ($)", color="blue")
 ax1.set_ylabel("ETH Price ($)", color="blue")
+ax1.tick_params(axis='y', labelcolor="blue")
+
 ax2 = ax1.twinx()
 ax2.plot(vol_series.index, vol_series.values * 100, label="Volatility (%)", color="red")
 ax2.set_ylabel("Annualized Volatility (%)", color="red")
+ax2.tick_params(axis='y', labelcolor="red")
+
 fig.tight_layout()
 st.pyplot(fig)
 
