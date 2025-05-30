@@ -8,8 +8,11 @@ import matplotlib.pyplot as plt
 st.set_page_config(
     page_title="Crypto Defi Dashboard",
     page_icon="💸",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+st.markdown("# Crypto Defi Dashboard")  # Also gives a nice header
+
 
 # --- Fetch ETH Price ---
 def fetch_eth_price():
