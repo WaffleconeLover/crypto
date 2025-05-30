@@ -5,11 +5,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import requests
 
-# Streamlit config
 st.set_page_config(page_title="ETH Leverage Heatmap", layout="wide")
 st.title("ETH Leverage Heatmap")
 
-# Session state setup
+# Session defaults
 defaults = {
     "eth_stack": 6.73,
     "eth_price_input": 2660,
@@ -32,7 +31,6 @@ with col2:
         st.session_state.loop1_eth = 10.4
         st.session_state.loop1_debt = 11200.0
 
-# ETH price logic
 eth_price_live = None
 try:
     response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
@@ -101,14 +99,25 @@ for s_ltv in second_loop_lvts:
 heatmap_df = pd.DataFrame(data)
 heatmap_df = heatmap_df[heatmap_df["Final Health Score"] >= 1.6].copy()
 
-# Drop any rows that are incomplete
-heatmap_df = heatmap_df.dropna()
+# Calculate Score and Rank
+heatmap_df["Score"] = (
+    heatmap_df["Final Health Score"] * 40 +
+    heatmap_df["Liq Drop %"] * 0.4 +
+    heatmap_df["ETH Gain %"] * 0.2 +
+    heatmap_df["Loop 2 Debt"] * 0.015
+)
+heatmap_df = heatmap_df.sort_values("Score", ascending=False).copy()
+heatmap_df["Rank"] = range(1, len(heatmap_df) + 1)
 
-# Ensure no NaNs before labeling
+# Strip helper
+def strip_zero(val):
+    return f"{val:.2f}".rstrip("0").rstrip(".")
+
+# Ensure required fields exist
 required_cols = ["Final Health Score", "Loop 2 Debt", "Liq Drop %", "Liq Price", "Total ETH", "ETH Gain %", "Rank"]
 heatmap_df = heatmap_df.dropna(subset=required_cols)
 
-# Add formatted label safely
+# Label formatter
 def format_label(row):
     try:
         return (
@@ -123,24 +132,7 @@ def format_label(row):
 
 heatmap_df["Label"] = heatmap_df.apply(format_label, axis=1)
 
-heatmap_df = heatmap_df.sort_values("Score", ascending=False).copy()
-heatmap_df["Rank"] = range(1, len(heatmap_df) + 1)
-
-def strip_zero(val):
-    return f"{val:.2f}".rstrip("0").rstrip(".")
-
-heatmap_df["Label"] = heatmap_df.apply(
-    lambda row: (
-        f"{strip_zero(row['Final Health Score'])}\n"
-        f"${row['Loop 2 Debt']}\n"
-        f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
-        f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
-        f"#{int(row['Rank'])}"
-    ),
-    axis=1
-)
-
-# Pivot and plot
+# Plot heatmap
 pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
 pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
 
