@@ -5,7 +5,7 @@ import re
 
 st.header("Step 4: LP Exit Planner")
 
-# ✅ Updated with authenticated subgraph for Arbitrum
+# ✅ Authenticated subgraph URL builder
 def get_arbitrum_subgraph_url(api_key):
     return f"https://gateway.thegraph.com/api/{api_key}/subgraphs/name/uniswap/uniswap-v3-arbitrum"
 
@@ -20,8 +20,10 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
             st.error("Arbitrum requires a valid Graph API key.")
             return None
         url = get_arbitrum_subgraph_url(api_key)
+        headers = {"Authorization": f"Bearer {api_key}"}
     else:
         url = SUBGRAPH_URLS[network]
+        headers = {}
 
     query = f"""
     {{
@@ -43,7 +45,7 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
     }}
     """
 
-    response = requests.post(url, json={"query": query})
+    response = requests.post(url, json={"query": query}, headers=headers)
     try:
         return response.json()
     except:
@@ -71,7 +73,7 @@ current_price = st.session_state.eth_price
 # --- UI ---
 st.subheader("🔗 LP Live Data Integration (Optional)")
 lp_url = st.text_input("Paste Uniswap LP Position URL")
-graph_key = st.text_input("Paste your Graph API Key (for Arbitrum)", value="d997b56020107b5449f63d478635f9c6", type="password")
+graph_key = st.text_input("Paste your Graph API Key (for Arbitrum)", type="password")
 moralis_key = st.text_input("Paste your Moralis API Key (for ETH tracking)", type="password")
 wallet_address = st.text_input("Wallet Address (optional for ETH tracking)")
 manual_network = st.selectbox("Network", ["ethereum", "arbitrum"], index=1)
