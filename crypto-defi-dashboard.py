@@ -49,31 +49,30 @@ st.markdown(f"- **ETH Stack After Loop 1:** {eth_stack1:.2f}")
 st.markdown(f"- **Loop 1 Health Score:** {health_score1:.2f}")
 
 # -------------------------------
-# Section 3: Loop 2 Grid
+# Section 3: Loop 2 Evaluation
 # -------------------------------
 st.header("Step 3: Loop 2 Evaluation")
 
 ltv2_range = range(30, 51)
 loop2_rows = []
 
-for ltv2 in ltv2_range:
-    usdc_borrowed2 = eth_price * initial_collateral * (ltv2 / 100)
-    total_usdc_debt = usdc_borrowed1 + usdc_borrowed2
-    total_collateral = initial_collateral  # ETH is not added in Loop 2
+eth_stack_after_loop1 = eth_stack1  # 6.73 + ETH gained in Loop 1
+usdc_debt_after_loop1 = usdc_borrowed1
 
-    health_score = (total_collateral * eth_price) / total_usdc_debt if total_usdc_debt > 0 else 999
+for ltv2 in ltv2_range:
+    loop2_usdc = eth_stack_after_loop1 * eth_price * (ltv2 / 100)
+    total_debt = usdc_debt_after_loop1 + loop2_usdc
+    health_score = (eth_stack_after_loop1 * eth_price) / total_debt if total_debt > 0 else 999
     percent_to_liquidation = health_score / 1.0
     liquidation_price = eth_price / percent_to_liquidation
 
     loop2_rows.append({
         "LTV (%)": ltv2,
         "Health Score": round(health_score, 2),
-        "Loan Amount ($)": f"${usdc_borrowed2:,.2f}",
+        "Loan Amount ($)": f"${loop2_usdc:,.2f}",
         "% to Liquidation": f"{percent_to_liquidation * 100:.1f}%",
         "ETH Price at Liquidation": f"${liquidation_price:,.2f}"
     })
 
 df_loop2 = pd.DataFrame(loop2_rows)
-
-# Display with sorting/filtering and full height
 st.dataframe(df_loop2, use_container_width=True)
