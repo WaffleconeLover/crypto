@@ -21,7 +21,6 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
             return None
         url = get_arbitrum_subgraph_url(api_key)
         headers = {
-            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
     else:
@@ -31,7 +30,7 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
     query = {
         "query": f"""
         {{
-          position(id: "{position_id_str}") {{
+          position(id: \"{position_id_str}\") {{
             id
             liquidity
             depositedToken0
@@ -51,11 +50,10 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
     }
 
     try:
-        response = requests.post(url, json=query, headers=headers)
+        response = requests.post(url, headers=headers, json=query)
         return response.json()
     except Exception as e:
         return {"ERROR": {"message": str(e)}}
-
 
 def tick_to_price(tick):
     return 1.0001 ** int(tick)
@@ -77,7 +75,7 @@ if "eth_price" not in st.session_state:
 current_price = st.session_state.eth_price
 
 # --- UI ---
-st.subheader("🔗 LP Live Data Integration (Optional)")
+st.subheader("\U0001F517 LP Live Data Integration (Optional)")
 lp_url = st.text_input("Paste Uniswap LP Position URL")
 graph_key = st.text_input("Paste your Graph API Key (for Arbitrum)", type="password")
 moralis_key = st.text_input("Paste your Moralis API Key (for ETH tracking)", type="password")
@@ -141,12 +139,12 @@ else:
 # --- Guidance ---
 st.subheader("Guidance")
 if status == "in":
-    st.success("✅ Your LP is currently in range. Let it continue accumulating fees.")
+    st.success("\u2705 Your LP is currently in range. Let it continue accumulating fees.")
 elif status == "above":
     st.markdown(f"Price is **{(current_price - lp_high)/lp_high:.1%} above** your LP range.")
     st.markdown(f"You've earned **{fees_earned_eth:.2f} ETH** in fees.")
     st.markdown(f"Loop 2 debt = **${loop2_debt_usd:,.2f}** = **{repayable_eth:.2f} ETH** at **${eth_scenario_price}**.")
-    st.warning(f"⚠️ You are short **{abs(net_eth):.2f} ETH** to repay Loop 2.")
+    st.warning(f"\u26a0\ufe0f You are short **{abs(net_eth):.2f} ETH** to repay Loop 2.")
 elif status == "below":
     needed = loop2_debt_usd / eth_scenario_price
     if needed <= eth_stack:
