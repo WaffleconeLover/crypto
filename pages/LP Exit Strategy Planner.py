@@ -5,17 +5,24 @@ import re
 
 st.header("Step 4: LP Exit Planner")
 
-# ✅ Updated subgraph source using The Graph's decentralized gateway
+# ✅ Updated with authenticated subgraph for Arbitrum
+def get_arbitrum_subgraph_url(api_key):
+    return f"https://gateway-arbitrum.network.thegraph.com/api/{api_key}/subgraphs/id/3x7LPQ4KgLxnhYDCq3ztPDC9oLb3fXwbhrkYu9nRMNRJ"
+
 SUBGRAPH_URLS = {
     "ethereum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
-    "arbitrum": "https://gateway-arbitrum.network.thegraph.com/api/v1/subgraphs/id/3x7LPQ4KgLxnhYDCq3ztPDC9oLb3fXwbhrkYu9nRMNRJ"
+    "arbitrum": None  # dynamically built
 }
 
-def convert_to_position_id_string(position_id):
-    return str(position_id).lower()
+def fetch_position_by_id(position_id_str, network, api_key=None):
+    if network == "arbitrum":
+        if not api_key:
+            st.error("Arbitrum requires a valid Graph API key.")
+            return None
+        url = get_arbitrum_subgraph_url(api_key)
+    else:
+        url = SUBGRAPH_URLS[network]
 
-def fetch_position_by_id(position_id_str, network):
-    url = SUBGRAPH_URLS.get(network)
     query = f"""
     {{
       position(id: "{position_id_str}") {{
@@ -35,14 +42,12 @@ def fetch_position_by_id(position_id_str, network):
       }}
     }}
     """
+
     response = requests.post(url, json={"query": query})
-
-    # 🔍 Debugging output
-    st.write("📤 GraphQL Query Sent:", query)
-    st.write("📥 HTTP Status Code:", response.status_code)
-    st.write("📦 Subgraph Response:", response.json())
-
-    return response.json()
+    try:
+        return response.json()
+    except:
+        return {"errors": ["Failed to parse response"]}
 
 def tick_to_price(tick):
     return 1.0001 ** int(tick)
@@ -66,7 +71,8 @@ current_price = st.session_state.eth_price
 # --- UI ---
 st.subheader("🔗 LP Live Data Integration (Optional)")
 lp_url = st.text_input("Paste Uniswap LP Position URL")
-moralis_key = st.text_input("Paste your Moralis API Key", type="password")
+graph_key = st.text_input("Paste your Graph API Key (for Arbitrum)", value="d997b56020107b5449f63d478635f9c6", type="password")
+moralis_key = st.text_input("Paste your Moralis API Key (for ETH tracking)", type="password")
 wallet_address = st.text_input("Wallet Address (optional for ETH tracking)")
 manual_network = st.selectbox("Network", ["ethereum", "arbitrum"], index=1)
 
@@ -79,17 +85,17 @@ if wallet_address and moralis_key:
         st.success(f"Live ETH Balance: {eth_live:.4f} ETH")
         use_live_eth = st.checkbox("Use live ETH balance to auto-fill stack", value=False)
 
-# --- LP Load via URL ---
+# --- LP Range Defaults ---
 lp_low = 2300.0
 lp_high = 2500.0
 match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
 if match:
     network_from_url = match.group(1).lower()
     position_id = match.group(2)
-    position_id_str = convert_to_position_id_string(position_id)
-    selected_network = network_from_url if network_from_url in SUBGRAPH_URLS else manual_network
-    data = fetch_position_by_id(position_id_str, selected_network)
-    pos = data.get("data", {}).get("position")
+    position_id_str = str(position_id)
+    selected_network = network_from_url if network_from_url in ["ethereum", "arbitrum"] else manual_network
+    response = fetch_position_by_id(position_id_str, selected_network, api_key=graph_key)
+    pos = response.get("data", {}).get("position") if response else None
     if pos:
         token0 = pos["pool"]["token0"]["symbol"]
         token1 = pos["pool"]["token1"]["symbol"]
@@ -100,6 +106,7 @@ if match:
         st.success(f"Loaded LP: {token0}/{token1} — Range: ${lp_low} to ${lp_high}")
     else:
         st.warning("LP position not found or failed to fetch.")
+        st.json(response)
 
 # --- Inputs ---
 lp_low = st.number_input("Your LP Lower Bound ($)", value=lp_low)
