@@ -81,7 +81,7 @@ def fetch_from_moralis(position_id):
     call_data = {
         "function_name": "positions",
         "abi": abi,
-        "params": [position_id]
+        "params": {"tokenId": position_id}  # <-- Fix is here
     }
 
     try:
