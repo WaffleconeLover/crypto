@@ -28,25 +28,25 @@ def fetch_position_by_id(position_id_str, network, api_key=None):
         headers = {"Content-Type": "application/json"}
 
     query = {
-        "query": f"""
-        {{
-          position(id: \"{position_id_str}\") {{
-            id
-            liquidity
-            depositedToken0
-            depositedToken1
-            collectedFeesToken0
-            collectedFeesToken1
-            pool {{
-              token0 {{ symbol decimals }}
-              token1 {{ symbol decimals }}
-              feeTier
-            }}
-            tickLower {{ tickIdx }}
-            tickUpper {{ tickIdx }}
-          }}
+    "query": f"""
+    {{
+      position(id: "{position_id_str}") {{
+        id
+        liquidity
+        depositedToken0
+        depositedToken1
+        collectedFeesToken0
+        collectedFeesToken1
+        pool {{
+          token0 {{ symbol decimals }}
+          token1 {{ symbol decimals }}
+          feeTier
         }}
-        """
+        tickLower {{ tickIdx }}
+        tickUpper {{ tickIdx }}
+      }}
+    }}
+    """
     }
 
     try:
