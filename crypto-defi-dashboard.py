@@ -146,4 +146,4 @@ if not pivot_hs.empty:
 else:
     st.info("No results meet the criteria (Final Health Score ≥ 1.6). Adjust inputs or try again.")
 
-st.markdown("**Instructions:** Loop 1 is now manually set. Explore granular Loop 2 options with a minimum health scor
+st.markdown("**Instructions:** Loop 1 is now manually set. Explore granular Loop 2 options with a minimum health score of 1.6.")
