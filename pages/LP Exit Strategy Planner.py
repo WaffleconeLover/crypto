@@ -1,4 +1,4 @@
-# LP Exit Planner - Supports Hex Conversion for LP Position IDs
+# LP Exit Planner - Revert to Wallet-Based LP Fetching
 import streamlit as st
 import pandas as pd
 import requests
@@ -12,15 +12,15 @@ SUBGRAPH_URLS = {
     "arbitrum": "https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-arbitrum-one"
 }
 
-# --- LP Fetch by Hex Position ID ---
-def fetch_uniswap_v3_position_by_id(position_id_hex, network):
+# --- LP Fetch for All Wallet Positions ---
+def fetch_uniswap_v3_positions(wallet_address, network):
     url = SUBGRAPH_URLS.get(network)
     if not url:
         return {}
 
     query = """
     {
-      position(id: \"%s\") {
+      positions(where: { owner: \"%s\" }) {
         id
         liquidity
         depositedToken0
@@ -36,15 +36,10 @@ def fetch_uniswap_v3_position_by_id(position_id_hex, network):
         tickUpper { tickIdx }
       }
     }
-    """ % position_id_hex
+    """ % wallet_address.lower()
 
     response = requests.post(url, json={"query": query})
     return response.json()
-
-# --- Convert numeric ID to hex padded string ---
-def convert_to_hex_position_id(position_id):
-    hex_str = hex(int(position_id))[2:].zfill(64)
-    return f"0x{hex_str}"
 
 # --- Moralis ETH Balance Fetch ---
 def get_eth_balance(wallet_address, moralis_api_key):
@@ -81,20 +76,12 @@ loop2_debt_usd = st.number_input("Loop 2 USDC Debt ($)", value=4000.00, step=50.
 
 # --- LP Data Integration Scaffold ---
 st.subheader("🔗 LP Live Data Integration (Optional)")
-lp_url = st.text_input("Paste Uniswap LP Position URL")
+wallet_address = st.text_input("Wallet Address for LP Tracking")
+network = st.selectbox("Select Network", ["ethereum", "arbitrum"], index=1)
 moralis_key = st.text_input("Paste your Moralis API Key", type="password")
 
-network = None
-position_id = None
-match = re.search(r"uniswap.org/positions/v3/([^/]+)/([0-9]+)", lp_url)
-if match:
-    network = match.group(1).lower()
-    position_id = match.group(2)
-
-# --- ETH Live Balance ---
 use_live_eth = False
 eth_live = None
-wallet_address = st.text_input("(Optional) Wallet Address for ETH Stack")
 if wallet_address and moralis_key:
     eth_live = get_eth_balance(wallet_address, moralis_key)
     if eth_live is not None:
@@ -109,19 +96,21 @@ if use_live_eth and eth_live is not None:
 else:
     eth_stack = st.number_input("Current ETH Stack", value=8.75, step=0.01)
 
-# --- Display LP Info ---
-if position_id and network:
-    position_id_hex = convert_to_hex_position_id(position_id)
-    lp_data = fetch_uniswap_v3_position_by_id(position_id_hex, network)
-    if "data" in lp_data and "position" in lp_data["data"] and lp_data["data"]["position"]:
-        pos = lp_data["data"]["position"]
-        pool = pos["pool"]
-        st.subheader(f"📊 LP Position: {pool['token0']['symbol']} / {pool['token1']['symbol']} on {network.capitalize()}")
-        st.markdown(f"- Liquidity: {pos['liquidity']}")
-        st.markdown(f"- Fee Tier: {int(pool['feeTier']) / 10000:.2%}")
-        st.markdown(f"- Tick Range: {pos['tickLower']['tickIdx']} to {pos['tickUpper']['tickIdx']}")
+# --- Display Wallet LPs ---
+if wallet_address:
+    lp_data = fetch_uniswap_v3_positions(wallet_address, network)
+    positions = lp_data.get("data", {}).get("positions", [])
+    if positions:
+        st.subheader(f"📊 LP Positions on {network.capitalize()}")
+        for i, pos in enumerate(positions):
+            pool = pos["pool"]
+            st.markdown(f"**Position {i+1}: {pool['token0']['symbol']} / {pool['token1']['symbol']}**")
+            st.markdown(f"- Liquidity: {pos['liquidity']}")
+            st.markdown(f"- Fee Tier: {int(pool['feeTier']) / 10000:.2%}")
+            st.markdown(f"- Tick Range: {pos['tickLower']['tickIdx']} to {pos['tickUpper']['tickIdx']}")
+            st.markdown("---")
     else:
-        st.warning("LP position not found or failed to fetch.")
+        st.warning("No LP positions found or failed to fetch.")
 
 # --- Scenarios ---
 st.subheader("Price Scenario Simulation")
