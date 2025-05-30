@@ -46,7 +46,7 @@ if eth_price_live:
     eth_price = eth_price_live
 else:
     st.warning("Unable to fetch live ETH price. Please enter it manually.")
-    eth_price = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=st.session_state.eth_price_input, step=10.0)
+    eth_price = st.number_input("Manual ETH Price Input ($)", min_value=100.0, max_value=10000.0, value=float(st.session_state.eth_price_input), step=10.0)", min_value=100.0, max_value=10000.0, value=st.session_state.eth_price_input, step=10.0)
     st.session_state.eth_price_input = eth_price
 
 # Input sliders
@@ -56,7 +56,7 @@ st.session_state.eth_stack = eth_stack
 # Loop 1 setup
 st.markdown("### Manual Loop 1 Setup")
 loop1_eth = st.number_input("ETH Stack After Loop 1", min_value=0.0, value=st.session_state.loop1_eth, step=0.01)
-loop1_debt = st.number_input("Debt After Loop 1 ($, value=float(st.session_state.loop1_debt))", min_value=0.0, value=st.session_state.loop1_debt, step=10.0)
+loop1_debt = st.number_input("Debt After Loop 1 ($)", min_value=0.0, value=float(st.session_state.loop1_debt), step=10.0))", min_value=0.0, value=st.session_state.loop1_debt, step=10.0)
 st.session_state.loop1_eth = loop1_eth
 st.session_state.loop1_debt = loop1_debt
 
@@ -126,6 +126,13 @@ def strip_zero(val):
 heatmap_df["Label"] = heatmap_df.apply(
     lambda row: (
         f"{strip_zero(row['Final Health Score'])}\n"
+        f"${row['Loop 2 Debt']}\n"
+        f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
+        f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
+        f"#{int(row['Rank'])}"
+    ),
+    axis=1
+)}\n"
         f"${row['Loop 2 Debt']}\n"
         f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
         f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
