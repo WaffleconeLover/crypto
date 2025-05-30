@@ -84,14 +84,16 @@ if not heatmap_df.empty:
     pivot_hs = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Final Health Score")
     pivot_labels = heatmap_df.pivot(index="Second LTV", columns="First LTV", values="Label")
 
-    fig, ax = plt.subplots(figsize=(6, 14))
+    fig, ax = plt.subplots(figsize=(10, 18))  # Wider and taller
     sns.heatmap(
         pivot_hs,
         annot=pivot_labels,
         fmt="",
         cmap="RdYlGn",
         cbar_kws={'label': 'Final Health Score'},
-        annot_kws={'fontsize': 7},
+        annot_kws={'fontsize': 10},  # Larger text
+        linewidths=0.5,
+        linecolor='gray',
         ax=ax
     )
     plt.title("Top ETH Leverage Setups with Exposure, Liquidation Risk, and Yield")
