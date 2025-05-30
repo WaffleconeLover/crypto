@@ -104,17 +104,24 @@ heatmap_df = heatmap_df[heatmap_df["Final Health Score"] >= 1.6].copy()
 # Drop any rows that are incomplete
 heatmap_df = heatmap_df.dropna()
 
-# Apply formatted label
-heatmap_df["Label"] = heatmap_df.apply(
-    lambda row: (
-        f"{strip_zero(row['Final Health Score'])}\n"
-        f"${row['Loop 2 Debt']}\n"
-        f"↓{row['Liq Drop %']}% @ ${strip_zero(row['Liq Price'])}\n"
-        f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
-        f"#{int(row['Rank'])}"
-    ),
-    axis=1
-)
+# Ensure no NaNs before labeling
+required_cols = ["Final Health Score", "Loop 2 Debt", "Liq Drop %", "Liq Price", "Total ETH", "ETH Gain %", "Rank"]
+heatmap_df = heatmap_df.dropna(subset=required_cols)
+
+# Add formatted label safely
+def format_label(row):
+    try:
+        return (
+            f"{strip_zero(row['Final Health Score'])}\n"
+            f"${row['Loop 2 Debt']}\n"
+            f"↓{int(row['Liq Drop %'])}% @ ${strip_zero(row['Liq Price'])}\n"
+            f"{strip_zero(row['Total ETH'])} ETH (+{int(row['ETH Gain %'])}%)\n"
+            f"#{int(row['Rank'])}"
+        )
+    except:
+        return ""
+
+heatmap_df["Label"] = heatmap_df.apply(format_label, axis=1)
 
 heatmap_df = heatmap_df.sort_values("Score", ascending=False).copy()
 heatmap_df["Rank"] = range(1, len(heatmap_df) + 1)
