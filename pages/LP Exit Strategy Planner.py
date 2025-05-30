@@ -12,8 +12,8 @@ SUBGRAPH_URLS = {
 }
 
 # ✅ Raw string ID (not hex)
-def convert_to_hex_position_id(position_id):
-    return str(position_id)
+def convert_to_position_id_string(position_id):
+    return str(position_id).lower()
 
 def fetch_position_by_id(position_id_str, network):
     url = SUBGRAPH_URLS.get(network)
@@ -37,6 +37,12 @@ def fetch_position_by_id(position_id_str, network):
     }}
     """
     response = requests.post(url, json={"query": query})
+    
+    # 🔍 Debugging output to Streamlit
+    st.write("📤 GraphQL Query Sent:", query)
+    st.write("📥 HTTP Status Code:", response.status_code)
+    st.write("📦 Subgraph Response:", response.json())
+
     return response.json()
 
 def tick_to_price(tick):
@@ -81,7 +87,7 @@ match = re.search(r"uniswap.org/positions/v[34]/([^/]+)/([0-9]+)", lp_url)
 if match:
     network_from_url = match.group(1).lower()
     position_id = match.group(2)
-    position_id_str = convert_to_hex_position_id(position_id)
+    position_id_str = convert_to_position_id_string(position_id)
     selected_network = network_from_url if network_from_url in SUBGRAPH_URLS else manual_network
     data = fetch_position_by_id(position_id_str, selected_network)
     pos = data.get("data", {}).get("position")
