@@ -5,13 +5,12 @@ import re
 
 st.header("Step 4: LP Exit Planner")
 
-# ✅ Correct subgraph sources
+# ✅ Updated subgraph source using The Graph's decentralized gateway
 SUBGRAPH_URLS = {
     "ethereum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3",
-    "arbitrum": "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3-arbitrum"
+    "arbitrum": "https://gateway-arbitrum.network.thegraph.com/api/v1/subgraphs/id/3x7LPQ4KgLxnhYDCq3ztPDC9oLb3fXwbhrkYu9nRMNRJ"
 }
 
-# ✅ Raw string ID (not hex)
 def convert_to_position_id_string(position_id):
     return str(position_id).lower()
 
@@ -37,8 +36,8 @@ def fetch_position_by_id(position_id_str, network):
     }}
     """
     response = requests.post(url, json={"query": query})
-    
-    # 🔍 Debugging output to Streamlit
+
+    # 🔍 Debugging output
     st.write("📤 GraphQL Query Sent:", query)
     st.write("📥 HTTP Status Code:", response.status_code)
     st.write("📦 Subgraph Response:", response.json())
