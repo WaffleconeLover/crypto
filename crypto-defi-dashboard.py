@@ -16,7 +16,7 @@ for key, default in {
     "eth_price_input": 2660,
     "eth_gained": 0.0,
     "loop1_eth": 10.4,
-    "loop1_debt": 11200
+    "loop1_debt": 11200.0
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
