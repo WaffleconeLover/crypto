@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import re
-from web3 import Web3
 
 st.header("Step 4: LP Exit Planner")
 
