@@ -16,7 +16,7 @@ if st.button("🔄 Reset All"):
 st.header("Loop 1 Setup")
 eth_price = st.number_input("Current ETH Price ($)", value=2500.0, min_value=100.0, max_value=10000.0, step=50.0)
 eth_collateral = st.number_input("Current ETH Collateral", value=6.73, min_value=0.0, max_value=100.0, step=0.01)
-ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=30, max_value=68, value=40)
+ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=10, max_value=50, value=25)
 
 # --- Loop 1 Calculations ---
 loop1_debt = (ltv1 / 100) * eth_collateral * eth_price
