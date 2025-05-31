@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 import requests
+import pytz
 from datetime import datetime
 
 st.set_page_config(page_title="LP Entry Visualizer", layout="wide")
@@ -14,39 +15,34 @@ range_multiplier = st.sidebar.slider("LP Upper Range Multiplier", 105, 120, 110)
 vol_window = st.sidebar.slider("Volume SMA Window", 5, 30, 20)
 body_threshold = st.sidebar.slider("Min Candle Body %", 1, 10, 2)
 
-# === Fetch Live ETH/USDC OHLCV Data from CoinGecko ===
+# === Cache the raw API call only ===
 @st.cache_data(ttl=300)
-def get_eth_usd_ohlc(days=7):
+def fetch_eth_usd_ohlc(days=7):
     url = f"https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days={days}"
     r = requests.get(url)
     if r.status_code != 200:
         st.error("Failed to fetch data from CoinGecko")
-        return pd.DataFrame()
-    data = r.json()
-    df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close"])
-    
-    # Localize datetime to Pacific Time
-    import pytz
-    la_tz = pytz.timezone("America/Los_Angeles")
-    df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms").dt.tz_localize("UTC").dt.tz_convert(la_tz)
-    
-    df = df.drop(columns=["timestamp"])
-    df["volume"] = np.random.randint(100, 500, len(df))  # Simulated volume
-    return df
+        return []
+    return r.json()
 
-# Get price data
-df = get_eth_usd_ohlc()
-if df.empty:
+# Fetch and process data
+raw_data = fetch_eth_usd_ohlc(days=7)
+if not raw_data:
     st.stop()
 
-# === Calculations ===
+df = pd.DataFrame(raw_data, columns=["timestamp", "open", "high", "low", "close"])
+la_tz = pytz.timezone("America/Los_Angeles")
+df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms").dt.tz_localize("UTC").dt.tz_convert(la_tz)
+df = df.drop(columns=["timestamp"])
+df["volume"] = np.random.randint(100, 500, len(df))  # Simulated volume
+
+# === LP Logic ===
 avg_volume = df['volume'].rolling(vol_window).mean()
 df['is_bullish'] = df['close'] > df['open']
 df['body_pct'] = abs(df['close'] - df['open']) / df['low'] * 100
 df['is_big_body'] = df['body_pct'] >= body_threshold
 df['is_high_volume'] = df['volume'] > avg_volume
 
-# Local high logic
 df['is_local_high'] = (df['high'] > df['high'].shift(1)) & (df['high'] > df['high'].shift(2))
 df['impulse'] = df['is_bullish'] & df['is_big_body'] & df['is_high_volume'] & df['is_local_high']
 df['impulse_close'] = np.where(df['impulse'], df['close'], np.nan)
