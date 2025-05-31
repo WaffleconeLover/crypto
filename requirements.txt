@@ -7,3 +7,4 @@ yfinance
 web3==6.10.0
 setuptools
 plotly
+requests
