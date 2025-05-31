@@ -33,43 +33,49 @@ st.header("Step 1: Fetch ETH Price")
 eth_price = st.session_state.eth_price
 st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 
-# --- AAVE Account Info via Moralis ---
+# --- AAVE Account Info via The Graph ---
 st.header("Step 2: Aave Account Overview")
 wallet_address = "0xb4f25c81fb52d959616e3837cbc9e24a283b9df4"
-moralis_api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjgyMDNmNDlmLTMzOWMtNDc5YS04Y2U4LTM0YzI5M2IzODU3YyIsIm9yZ0lkIjoiNDMwOTg5IiwidXNlcklkIjoiNDQzMzM1IiwidHlwZUlkIjoiMmVlOTUxYjAtOTk4ZC00NjRmLWFmZTEtM2FlZDVlNjhhMzE3IiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3MzkzNzI3NTUsImV4cCI6NDg5NTEzMjc1NX0.8GWca9PdAXaJ5ReNTdCKnMQkQ3GdEGPOj67yTw19krM"
 
-headers = {
-    "accept": "application/json",
-    "X-API-Key": moralis_api_key
-}
+query = f"""
+{{
+  userReserves(where: {{ user: \"{wallet_address}\" }}) {{
+    reserve {{
+      symbol
+      decimals
+    }}
+    scaledATokenBalance
+    currentTotalDebt
+  }}
+  users(where: {{ id: \"{wallet_address}\" }}) {{
+    healthFactor
+  }}
+}}
+"""
 
-params = {
-    "chain": "arbitrum"
-}
-
-url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/defi/positions"
-response = requests.get(url, headers=headers, params=params)
+response = requests.post(
+    "https://api.thegraph.com/subgraphs/name/aave/protocol-v3-arbitrum",
+    json={"query": query}
+)
 
 try:
-    data = response.json()
-except requests.exceptions.JSONDecodeError:
-    st.error("Failed to decode JSON response from Moralis. Status code: {}".format(response.status_code))
+    result = response.json()["data"]
+except Exception as e:
+    st.error("Failed to decode JSON from The Graph.")
     st.stop()
 
 supplied_eth = 0
 borrowed_usd = 0
 health_factor = 0
 
-defi_positions = data.get("result", [])
-for pos in defi_positions:
-    if pos.get("protocol") == "aave-v3":
-        for col in pos.get("collateral", []):
-            if col.get("symbol", "").lower() == "weth":
-                supplied_eth = float(col.get("amount", 0))
-        for debt in pos.get("debt", []):
-            borrowed_usd += float(debt.get("usdValue", 0))
-        health_factor = float(pos.get("healthFactor", 0))
-        break
+for entry in result.get("userReserves", []):
+    if entry["reserve"]["symbol"].lower() == "weth":
+        decimals = int(entry["reserve"]["decimals"])
+        supplied_eth = int(entry["scaledATokenBalance"]) / 10 ** decimals
+    if entry["currentTotalDebt"]:
+        borrowed_usd += float(entry["currentTotalDebt"])
+
+health_factor = float(result.get("users", [{}])[0].get("healthFactor", 0))
 
 # --- Derived Metrics ---
 total_collateral_usd = supplied_eth * eth_price
