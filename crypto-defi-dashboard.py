@@ -47,17 +47,21 @@ params = {
     "chain": "arbitrum"
 }
 
-# Moralis endpoint for Aave positions (simplified via DeFi plugin)
-url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/defi/aave"
+url = f"https://deep-index.moralis.io/api/v2.2/wallets/{wallet_address}/defi"
 response = requests.get(url, headers=headers, params=params)
-data = response.json()
+
+try:
+    data = response.json()
+except requests.exceptions.JSONDecodeError:
+    st.error("Failed to decode JSON response from Moralis. Status code: {}".format(response.status_code))
+    st.stop()
 
 supplied_eth = 0
 borrowed_usd = 0
 health_factor = 0
 
-for item in data:
-    if item['protocol'] == 'aave-v3':
+for item in data.get("defi", []):
+    if item.get('protocol') == 'aave-v3' and item.get('chain') == 'arbitrum':
         for supply in item.get('supply', []):
             if supply['symbol'].lower() == 'weth':
                 supplied_eth = float(supply['amount'])
