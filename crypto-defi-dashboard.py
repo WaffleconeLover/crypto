@@ -44,7 +44,7 @@ query = f"""
       symbol
       decimals
     }}
-    scaledATokenBalance
+    currentATokenBalance
     currentTotalDebt
   }}
   users(where: {{ id: \"{wallet_address}\" }}) {{
@@ -73,7 +73,7 @@ if "userReserves" in result:
     for entry in result.get("userReserves", []):
         if entry.get("reserve", {}).get("symbol", "").lower() == "weth":
             decimals = int(entry["reserve"].get("decimals", 18))
-            supplied_eth = int(entry.get("scaledATokenBalance", 0)) / 10 ** decimals
+            supplied_eth = float(entry.get("currentATokenBalance", 0)) / 10 ** decimals
         if entry.get("currentTotalDebt"):
             borrowed_usd += float(entry["currentTotalDebt"])
 
