@@ -11,7 +11,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-st.markdown("# AAVE Collateral and Lending")  # Also gives a nice header
+
+st.markdown("# AAVE Collateral and Lending")
 
 # --- Fetch ETH Price ---
 def fetch_eth_price():
@@ -32,47 +33,59 @@ st.header("Step 1: Fetch ETH Price")
 eth_price = st.session_state.eth_price
 st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 
-# --- Lock/Unlock Mechanism ---
-if "lock_settings" not in st.session_state:
-    st.session_state.lock_settings = False
+# --- AAVE Account Info ---
+st.header("Step 2: Aave Account Overview")
+wallet_address = "0xb4f25c81fb52d959616e3837cbc9e24a283b9df4".lower()
 
-st.header("Step 2: Configure Loop 1")
+query = f"""
+{{
+  userReserves(where: {{ user: \"{wallet_address}\" }}) {{
+    reserve {{
+      symbol
+      decimals
+      usageAsCollateralEnabled
+    }}
+    scaledATokenBalance
+    currentTotalDebt
+  }}
+  users(where: {{ id: \"{wallet_address}\" }}) {{
+    healthFactor
+  }}
+}}
+"""
 
-col1, col2 = st.columns(2)
-with col1:
-    if not st.session_state.lock_settings:
-        initial_collateral_eth = st.number_input("Initial ETH Collateral", value=6.73, step=0.01, key="initial_eth")
-    else:
-        st.markdown(f"**Initial ETH Collateral:** {st.session_state.initial_eth}")
-with col2:
-    if not st.session_state.lock_settings:
-        ltv1 = st.slider("Loop 1 Borrow LTV (%)", min_value=10, max_value=58, value=30, key="ltv1")
-    else:
-        st.markdown(f"**Loop 1 LTV:** {st.session_state.ltv1}")
+response = requests.post(
+    "https://api.thegraph.com/subgraphs/name/aave/protocol-v3-arbitrum",
+    json={"query": query}
+)
+data = response.json()
 
-expected_lp_days = st.slider("Expected LP Duration (Days)", 1, 30, 7)
+supplied_eth = 0
+borrowed_usd = 0
+health_factor = 0
 
-col3, col4 = st.columns(2)
-with col3:
-    if st.button("Lock Loop 1 Settings"):
-        st.session_state.lock_settings = True
-        st.session_state.initial_eth = initial_collateral_eth
-        st.session_state.ltv1 = ltv1
-with col4:
-    if st.button("Unlock Loop 1 Settings"):
-        st.session_state.lock_settings = False
+for entry in data["data"]["userReserves"]:
+    if entry["reserve"]["symbol"] == "WETH":
+        decimals = int(entry["reserve"]["decimals"])
+        supplied_eth = int(entry["scaledATokenBalance"]) / 10**decimals
+    if entry["currentTotalDebt"]:
+        borrowed_usd += float(entry["currentTotalDebt"])
 
-# --- Loop 1 Calculation ---
-initial_eth = st.session_state.get("initial_eth", 6.73)
-ltv1 = st.session_state.get("ltv1", 30)
-collateral_usd = initial_eth * eth_price
-debt_usd = collateral_usd * ltv1 / 100
-eth_gained = debt_usd / eth_price
-total_eth = initial_eth + eth_gained
-total_collateral_usd = total_eth * eth_price
-health_score = (total_collateral_usd * 0.80) / debt_usd
-liq_price = (debt_usd / total_eth) / 0.80
-pct_to_liq = 1 - (liq_price / eth_price)
+health_factor = float(data["data"]["users"][0]["healthFactor"])
+
+# --- Derived Metrics ---
+total_collateral_usd = supplied_eth * eth_price
+liq_price = borrowed_usd / (supplied_eth * 0.8) if supplied_eth > 0 else 0
+pct_to_liq = 1 - (liq_price / eth_price) if eth_price > 0 else 0
+
+# --- Loop 1 Summary ---
+st.subheader("Loop 1 Summary")
+st.markdown(f"- **Debt After Loop 1:** ${borrowed_usd:,.2f}")
+st.markdown(f"- **ETH Stack After Loop 1:** {supplied_eth:.2f}")
+st.markdown(f"- **New Collateral After Loop 1:** ${total_collateral_usd:,.2f}")
+st.markdown(f"- **Loop 1 Health Score:** {health_factor:.2f}")
+st.markdown(f"- **Loop 1 % to Liquidation:** {pct_to_liq:.1%}")
+st.markdown(f"- **Loop 1 Liquidation Price:** ${liq_price:,.2f}")
 
 # --- Volatility ---
 def get_eth_volatility(days):
@@ -84,6 +97,7 @@ def get_eth_volatility(days):
     vol_annualized = rolling_std.iloc[-1] * np.sqrt(365)
     return vol_annualized, df, price_series, rolling_std
 
+expected_lp_days = 7
 vol, hist_df, price_series, rolling_std = get_eth_volatility(expected_lp_days)
 vol_pct = vol * 100
 
@@ -95,15 +109,6 @@ def categorize_vol(v):
     else:
         return "High"
 
-# --- Loop 1 Summary ---
-st.subheader("Loop 1 Summary")
-st.markdown(f"- **Debt After Loop 1:** ${debt_usd:,.2f}")
-st.markdown(f"- **ETH Gained After Loop 1:** {eth_gained:.2f}")
-st.markdown(f"- **ETH Stack After Loop 1:** {total_eth:.2f}")
-st.markdown(f"- **New Collateral After Loop 1:** ${total_collateral_usd:,.2f}")
-st.markdown(f"- **Loop 1 Health Score:** {health_score:.2f}")
-st.markdown(f"- **Loop 1 % to Liquidation:** {pct_to_liq:.1%}")
-st.markdown(f"- **Loop 1 Liquidation Price:** ${liq_price:,.2f}")
 st.markdown(f"- **Est. Annualized Volatility ({expected_lp_days}D Lookback):** {vol_pct:.2f}%")
 st.markdown(f"- **Market Behavior:** {categorize_vol(vol_pct)}")
 
@@ -123,10 +128,10 @@ st.header("Step 3: Loop 2 Evaluation")
 loop2_data = []
 for ltv2 in range(10, 50):
     loan2 = total_collateral_usd * ltv2 / 100
-    total_debt = debt_usd + loan2
-    hf = (total_collateral_usd * 0.80) / total_debt
-    liq_price2 = total_debt / (total_eth * 0.80)
-    pct_to_liq2 = 1 - (liq_price2 / eth_price)
+    total_debt = borrowed_usd + loan2
+    hf = (total_collateral_usd * 0.80) / total_debt if total_debt > 0 else 0
+    liq_price2 = total_debt / (supplied_eth * 0.80) if supplied_eth > 0 else 0
+    pct_to_liq2 = 1 - (liq_price2 / eth_price) if eth_price > 0 else 0
     loop2_data.append({
         "LTV (%)": ltv2,
         "Health Score": round(hf, 2),
