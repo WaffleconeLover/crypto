@@ -47,7 +47,7 @@ params = {
     "chain": "arbitrum"
 }
 
-url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/aavev2/net-worth"
+url = f"https://deep-index.moralis.io/api/v2.2/{wallet_address}/defi/positions"
 response = requests.get(url, headers=headers, params=params)
 
 try:
@@ -60,14 +60,16 @@ supplied_eth = 0
 borrowed_usd = 0
 health_factor = 0
 
-collateral = data.get("collateral", [])
-for asset in collateral:
-    if asset.get("symbol", "").lower() == "weth":
-        supplied_eth = float(asset.get("amount", 0))
+defi_positions = data.get("result", [])
+for pos in defi_positions:
+    if pos.get("protocol") == "aave-v3":
+        for col in pos.get("collateral", []):
+            if col.get("symbol", "").lower() == "weth":
+                supplied_eth = float(col.get("amount", 0))
+        for debt in pos.get("debt", []):
+            borrowed_usd += float(debt.get("usdValue", 0))
+        health_factor = float(pos.get("healthFactor", 0))
         break
-
-borrowed_usd = float(data.get("debt", 0))
-health_factor = float(data.get("healthFactor", 0))
 
 # --- Derived Metrics ---
 total_collateral_usd = supplied_eth * eth_price
