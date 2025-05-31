@@ -23,7 +23,9 @@ def get_eth_usd_ohlc(days=7):
         return pd.DataFrame()
     data = r.json()
     df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close"])
-    df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms")
+    import pytz
+    la_tz = pytz.timezone("America/Los_Angeles")
+    df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms").dt.tz_localize("UTC").dt.tz_convert(la_tz)
     df = df.drop(columns=["timestamp"])
     df["volume"] = np.random.randint(100, 500, len(df))  # Simulate volume
     return df
