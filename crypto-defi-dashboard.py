@@ -127,7 +127,7 @@ for ltv2 in range(10, 50):
     hf = (total_collateral_usd * 0.80) / total_debt
     liq_price2 = total_debt / (total_eth * 0.80)
     pct_to_liq2 = 1 - (liq_price2 / eth_price)
-       loop2_data.append({
+    loop2_data.append({
         "LTV (%)": ltv2,
         "Health Score": round(hf, 2),
         "Loan Amount ($)": f"${loan2:,.2f}",
