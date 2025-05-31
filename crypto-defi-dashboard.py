@@ -33,52 +33,12 @@ st.header("Step 1: Fetch ETH Price")
 eth_price = st.session_state.eth_price
 st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 
-# --- AAVE Account Info via The Graph ---
+# --- Manual Override for AAVE Balances ---
 st.header("Step 2: Aave Account Overview")
-wallet_address = "0xb4f25c81fb52d959616e3837cbc9e24a283b9df4".lower()
 
-query = f"""
-{{
-  userReserves(where: {{ user: \"{wallet_address}\" }}) {{
-    reserve {{
-      symbol
-      decimals
-    }}
-    currentATokenBalance
-    currentTotalDebt
-  }}
-  users(where: {{ id: \"{wallet_address}\" }}) {{
-    healthFactor
-  }}
-}}
-"""
-
-response = requests.post(
-    "https://api.thegraph.com/subgraphs/name/aave/protocol-v3-arbitrum",
-    json={"query": query}
-)
-
-try:
-    json_data = response.json()
-    result = json_data.get("data", {})
-except Exception as e:
-    st.error("Failed to decode JSON from The Graph.")
-    st.stop()
-
-supplied_eth = 0
-borrowed_usd = 0
-health_factor = 0
-
-if "userReserves" in result:
-    for entry in result.get("userReserves", []):
-        if entry.get("reserve", {}).get("symbol", "").lower() == "weth":
-            decimals = int(entry["reserve"].get("decimals", 18))
-            supplied_eth = float(entry.get("currentATokenBalance", 0)) / 10 ** decimals
-        if entry.get("currentTotalDebt"):
-            borrowed_usd += float(entry["currentTotalDebt"])
-
-if result.get("users") and len(result["users"]) > 0:
-    health_factor = float(result["users"][0].get("healthFactor", 0))
+supplied_eth = 9.41
+borrowed_usd = 6798.58
+health_factor = 2.80
 
 # --- Derived Metrics ---
 total_collateral_usd = supplied_eth * eth_price
