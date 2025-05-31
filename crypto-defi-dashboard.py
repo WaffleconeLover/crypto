@@ -35,7 +35,7 @@ st.markdown(f"**Real-Time ETH Price:** ${eth_price:,.2f}")
 
 # --- AAVE Account Info via The Graph ---
 st.header("Step 2: Aave Account Overview")
-wallet_address = "0xb4f25c81fb52d959616e3837cbc9e24a283b9df4"
+wallet_address = "0xb4f25c81fb52d959616e3837cbc9e24a283b9df4".lower()
 
 query = f"""
 {{
@@ -59,7 +59,8 @@ response = requests.post(
 )
 
 try:
-    result = response.json()["data"]
+    json_data = response.json()
+    result = json_data.get("data", {})
 except Exception as e:
     st.error("Failed to decode JSON from The Graph.")
     st.stop()
@@ -68,14 +69,16 @@ supplied_eth = 0
 borrowed_usd = 0
 health_factor = 0
 
-for entry in result.get("userReserves", []):
-    if entry["reserve"]["symbol"].lower() == "weth":
-        decimals = int(entry["reserve"]["decimals"])
-        supplied_eth = int(entry["scaledATokenBalance"]) / 10 ** decimals
-    if entry["currentTotalDebt"]:
-        borrowed_usd += float(entry["currentTotalDebt"])
+if "userReserves" in result:
+    for entry in result.get("userReserves", []):
+        if entry.get("reserve", {}).get("symbol", "").lower() == "weth":
+            decimals = int(entry["reserve"].get("decimals", 18))
+            supplied_eth = int(entry.get("scaledATokenBalance", 0)) / 10 ** decimals
+        if entry.get("currentTotalDebt"):
+            borrowed_usd += float(entry["currentTotalDebt"])
 
-health_factor = float(result.get("users", [{}])[0].get("healthFactor", 0))
+if result.get("users") and len(result["users"]) > 0:
+    health_factor = float(result["users"][0].get("healthFactor", 0))
 
 # --- Derived Metrics ---
 total_collateral_usd = supplied_eth * eth_price
