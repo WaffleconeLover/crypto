@@ -15,6 +15,7 @@ vol_window = st.sidebar.slider("Volume SMA Window", 5, 30, 20)
 body_threshold = st.sidebar.slider("Min Candle Body %", 1, 10, 2)
 
 # === Fetch Live ETH/USDC OHLCV Data from CoinGecko ===
+@st.cache_data(ttl=300)
 def get_eth_usd_ohlc(days=7):
     url = f"https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days={days}"
     r = requests.get(url)
@@ -23,11 +24,14 @@ def get_eth_usd_ohlc(days=7):
         return pd.DataFrame()
     data = r.json()
     df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close"])
+    
+    # Localize datetime to Pacific Time
     import pytz
     la_tz = pytz.timezone("America/Los_Angeles")
     df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms").dt.tz_localize("UTC").dt.tz_convert(la_tz)
+    
     df = df.drop(columns=["timestamp"])
-    df["volume"] = np.random.randint(100, 500, len(df))  # Simulate volume
+    df["volume"] = np.random.randint(100, 500, len(df))  # Simulated volume
     return df
 
 # Get price data
