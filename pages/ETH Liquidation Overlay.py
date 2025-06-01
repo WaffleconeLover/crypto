@@ -20,7 +20,7 @@ liquidation_clusters = {
 }
 
 # Step 2: Add manual LP range
-lp_range = (2575, 2595)  # Example LP range
+lp_range = (2359, 2509)  # Example LP range
 
 # Plotting
 fig, ax = plt.subplots(figsize=(12, 6))
