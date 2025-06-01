@@ -12,3 +12,4 @@ pytz
 python-binance
 mplfinance
 pytesseract
+time
