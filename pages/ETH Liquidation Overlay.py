@@ -3,36 +3,33 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from binance.client import Client
-from datetime import datetime
-import pytz
+import requests
 
-# Binance API setup (public access only)
-client = Client()
-symbol = "ETHUSDT"
-interval = Client.KLINE_INTERVAL_30MIN
+# Pull Binance 30-minute ETH/USDT klines (last 24h = 48 candles)
+def get_binance_klines(symbol="ETHUSDT", interval="30m", limit=48):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    response = requests.get(url)
+    response.raise_for_status()
+    return pd.DataFrame(response.json(), columns=[
+        'Open Time', 'Open', 'High', 'Low', 'Close', 'Volume',
+        'Close Time', 'Quote Volume', 'Trades',
+        'Taker Buy Base', 'Taker Buy Quote', 'Ignore']
+    )
 
-# Pull last 24 hours of 30m candles (48 candles total)
-klines = client.get_klines(symbol=symbol, interval=interval, limit=48)
+# Get the klines
+klines = get_binance_klines()
 
-# Parse into DataFrame
-data = pd.DataFrame(klines, columns=[
-    'Open Time', 'Open', 'High', 'Low', 'Close', 'Volume',
-    'Close Time', 'Quote Asset Volume', 'Number of Trades',
-    'Taker Buy Base Asset Volume', 'Taker Buy Quote Asset Volume', 'Ignore'
-])
-
-# Convert types
+# Convert to proper format
 for col in ['Open', 'High', 'Low', 'Close']:
-    data[col] = data[col].astype(float)
-data['Time'] = pd.to_datetime(data['Open Time'], unit='ms')
+    klines[col] = klines[col].astype(float)
+klines['Time'] = pd.to_datetime(klines['Open Time'], unit='ms')
 
 # Compute Heikin Ashi candles
-data['HA_Close'] = (data['Open'] + data['High'] + data['Low'] + data['Close']) / 4
-ha_open = [(data['Open'][0] + data['Close'][0]) / 2]
-for i in range(1, len(data)):
-    ha_open.append((ha_open[i-1] + data['HA_Close'][i-1]) / 2)
-data['HA_Open'] = ha_open
+klines['HA_Close'] = (klines['Open'] + klines['High'] + klines['Low'] + klines['Close']) / 4
+ha_open = [(klines['Open'][0] + klines['Close'][0]) / 2]
+for i in range(1, len(klines)):
+    ha_open.append((ha_open[i-1] + klines['HA_Close'][i-1]) / 2)
+klines['HA_Open'] = ha_open
 
 # Simulated liquidation clusters (price levels and $ values)
 liquidation_clusters = {
@@ -51,7 +48,7 @@ lp_range = (2575, 2595)
 fig, ax = plt.subplots(figsize=(12, 6))
 
 # Plot Heikin Ashi price line
-ax.plot(data['Time'], data['HA_Close'], label='ETH Price (Heikin Ashi)', color='black')
+ax.plot(klines['Time'], klines['HA_Close'], label='ETH Price (Heikin Ashi)', color='black')
 
 # Plot LP range
 ax.axhspan(lp_range[0], lp_range[1], color='green', alpha=0.2, label=f'LP Range {lp_range[0]}–{lp_range[1]}')
@@ -60,7 +57,7 @@ ax.axhspan(lp_range[0], lp_range[1], color='green', alpha=0.2, label=f'LP Range 
 for level, value in liquidation_clusters.items():
     intensity = min(1.0, value / max(liquidation_clusters.values()))
     ax.axhspan(level - 1, level + 1, color='red', alpha=intensity * 0.4)
-    ax.text(data['Time'].iloc[0], level, f"${value:.1f}M", fontsize=8, color='darkred', va='center')
+    ax.text(klines['Time'].iloc[0], level, f"${value:.1f}M", fontsize=8, color='darkred', va='center')
 
 # Formatting
 ax.set_title("ETH Price (Heikin Ashi) with Liquidation Zones & LP Range")
