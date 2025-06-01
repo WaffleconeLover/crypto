@@ -1,4 +1,5 @@
 # Step 1: Prototype overlay with synthetic ETH price + cluster bands
+import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -43,5 +44,5 @@ ax.set_ylabel("Price")
 ax.legend()
 ax.grid(True)
 
-plt.tight_layout()
-plt.show()
+# Render the plot in Streamlit
+st.pyplot(fig)
