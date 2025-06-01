@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import requests
 import time
-import mplfinance as mpf
 
 st.set_page_config(layout="wide")
 
@@ -71,46 +70,25 @@ for price, value in liquidation_clusters.items():
     flush_score = round((size_score * 0.6 + proximity_score * 0.4), 2)
     flush_scores[price] = flush_score
 
-# Prepare data for mplfinance Heikin Ashi chart
-mpf_data = klines[['Open Time', 'HA_Open', 'High', 'Low', 'HA_Close']].copy()
-mpf_data.rename(columns={
-    'Open Time': 'Date',
-    'HA_Open': 'Open',
-    'HA_Close': 'Close'
-}, inplace=True)
-mpf_data.set_index('Date', inplace=True)
+# Plotting
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.plot(klines['Open Time'], klines['HA_Close'], label='ETH Price (Heikin Ashi)', color='black')
 
-# Add horizontal lines for liquidation clusters
-liquidation_lines = []
+# Plot LP range
+ax.axhspan(lp_range[0], lp_range[1], color='green', alpha=0.2, label=f'LP Range {lp_range[0]}–{lp_range[1]}')
+
+# Plot liquidation clusters with flush scores
 for level, value in liquidation_clusters.items():
-    line = mpf.make_addplot(
-        [level] * len(mpf_data),
-        type='line',
-        color='red',
-        width=0.5,
-        panel=0,
-        alpha=min(1.0, value / max_value) * 0.4
-    )
-    liquidation_lines.append(line)
-
-# Build figure with overlays
-fig, axlist = mpf.plot(
-    mpf_data,
-    type='candle',
-    style='yahoo',
-    addplot=liquidation_lines,
-    ylabel='ETH Price',
-    title='ETH Heikin Ashi with Liquidation Zones, LP Range & Flush Scores',
-    fill_between=dict(y1=lp_range[0], y2=lp_range[1], color='lightgreen', alpha=0.2),
-    returnfig=True,
-    figsize=(12, 6)
-)
-
-# Annotate with flush score labels
-ax = axlist[0]
-for level, value in liquidation_clusters.items():
+    intensity = min(1.0, value / max_value)
     score = flush_scores[level]
-    ax.text(mpf_data.index[0], level, f"${value:.1f}M\nScore: {score}", fontsize=8, color='darkred', va='center')
+    ax.axhspan(level - 1, level + 1, color='red', alpha=intensity * 0.4)
+    ax.text(klines['Open Time'].iloc[0], level, f"${value:.1f}M\nScore: {score}", fontsize=8, color='darkred', va='center')
 
-# Display in Streamlit
+# Formatting
+ax.set_title("ETH Price (Heikin Ashi) with Liquidation Zones, LP Range & Flush Scores")
+ax.set_xlabel("Time")
+ax.set_ylabel("Price")
+ax.legend()
+ax.grid(True)
+
 st.pyplot(fig)
