@@ -3,34 +3,34 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
+import time
 
-# Pull ETH/USDT OHLC data from Moralis (last 24h = 48 candles)
-def get_moralis_ohlcv(symbol="ethusdt", interval="30m", limit=48):
-    api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjgyMDNmNDlmLTMzOWMtNDc5YS04Y2U4LTM0YzI5M2IzODU3YyIsIm9yZ0lkIjoiNDMwOTg5IiwidXNlcklkIjoiNDQzMzM1IiwidHlwZUlkIjoiMmVlOTUxYjAtOTk4ZC00NjRmLWFmZTEtM2FlZDVlNjhhMzE3IiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3MzkzNzI3NTUsImV4cCI6NDg5NTEzMjc1NX0.8GWca9PdAXaJ5ReNTdCKnMQkQ3GdEGPOj67yTw19krM"
-    url = f"https://deep-index.moralis.io/api/v2/market-data/ohlcv/{symbol}?interval={interval}&limit={limit}"
-    headers = {
-        "X-API-Key": api_key
-    }
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json().get("result", [])
-        df = pd.DataFrame(data)
-        df['Open Time'] = pd.to_datetime(df['timestamp'])
-        df.rename(columns={
-            'open': 'Open',
-            'high': 'High',
-            'low': 'Low',
-            'close': 'Close',
-            'volume': 'Volume'
-        }, inplace=True)
-        return df
-    except Exception as e:
-        st.error("❌ Moralis OHLC fetch failed.")
-        st.stop()
+st.set_page_config(layout="wide")
 
-# Fetch data
-klines = get_moralis_ohlcv()
+@st.cache_data(ttl=60 * 60, show_spinner=False)
+def get_coingecko_ohlc():
+    url = "https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days=1"
+    response = requests.get(url)
+    response.raise_for_status()
+    data = response.json()
+    df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
+    df["Open Time"] = pd.to_datetime(df["timestamp"], unit="ms")
+    return df, time.time()
+
+# Session state for manual refresh
+if "price_data" not in st.session_state:
+    st.session_state.price_data, st.session_state.last_refresh = get_coingecko_ohlc()
+
+col1, col2 = st.columns([1, 5])
+with col1:
+    if st.button("🔄 Refresh Price"):
+        st.session_state.price_data, st.session_state.last_refresh = get_coingecko_ohlc()
+
+elapsed = int(time.time() - st.session_state.last_refresh)
+with col1:
+    st.caption(f"⏱️ Last refreshed {elapsed} seconds ago")
+
+klines = st.session_state.price_data.copy()
 
 # Compute Heikin Ashi candles
 klines['HA_Close'] = (klines['Open'] + klines['High'] + klines['Low'] + klines['Close']) / 4
@@ -61,14 +61,12 @@ flush_scores = {}
 for price, value in liquidation_clusters.items():
     size_score = value / max_value
     proximity = abs(price - current_price) / current_price
-    proximity_score = max(0, 1 - proximity * 20)  # full score if <5% away
+    proximity_score = max(0, 1 - proximity * 20)
     flush_score = round((size_score * 0.6 + proximity_score * 0.4), 2)
     flush_scores[price] = flush_score
 
 # Plotting
 fig, ax = plt.subplots(figsize=(12, 6))
-
-# Plot Heikin Ashi price line
 ax.plot(klines['Open Time'], klines['HA_Close'], label='ETH Price (Heikin Ashi)', color='black')
 
 # Plot LP range
@@ -88,5 +86,4 @@ ax.set_ylabel("Price")
 ax.legend()
 ax.grid(True)
 
-# Display in Streamlit
 st.pyplot(fig)
