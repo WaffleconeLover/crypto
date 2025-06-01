@@ -31,8 +31,7 @@ with col1:
         st.session_state.last_refresh = time.time()
 
 elapsed = int(time.time() - st.session_state.last_refresh)
-with col1:
-    st.caption(f"⏱️ Last refreshed {elapsed} seconds ago")
+col2.caption(f"⏱️ Last refreshed {elapsed} seconds ago")
 
 # Work on the data
 klines = st.session_state.price_data.copy()
