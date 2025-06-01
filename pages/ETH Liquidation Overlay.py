@@ -55,6 +55,7 @@ liquidation_clusters = {
 
 # Manual LP range input
 lp_range = (2575, 2595)
+lp_top = lp_range[1]
 
 # Current ETH price from latest HA close
 current_price = klines['HA_Close'].iloc[-1]
@@ -76,15 +77,16 @@ ax.plot(klines['Open Time'], klines['HA_Close'], label='ETH Price (Heikin Ashi)'
 # Plot LP range
 ax.axhspan(lp_range[0], lp_range[1], color='green', alpha=0.2, label=f'LP Range {lp_range[0]}–{lp_range[1]}')
 
-# Plot liquidation clusters with flush scores
+# Plot only liquidation clusters below LP range top
 for level, value in liquidation_clusters.items():
-    intensity = min(1.0, value / max_value)
-    score = flush_scores[level]
-    ax.axhspan(level - 1, level + 1, color='red', alpha=intensity * 0.4)
-    ax.text(klines['Open Time'].iloc[0], level, f"${value:.1f}M\nScore: {score}", fontsize=8, color='darkred', va='center')
+    if level <= lp_top:
+        intensity = min(1.0, value / max_value)
+        score = flush_scores[level]
+        ax.axhspan(level - 1, level + 1, color='red', alpha=intensity * 0.4)
+        ax.text(klines['Open Time'].iloc[0], level, f"${value:.1f}M\nScore: {score}", fontsize=8, color='darkred', va='center')
 
 # Formatting
-ax.set_title("ETH Price (Heikin Ashi) with Liquidation Zones, LP Range & Flush Scores")
+ax.set_title("ETH Price (Heikin Ashi) with Liquidation Zones (below LP top), LP Range & Flush Scores")
 ax.set_xlabel("Time")
 ax.set_ylabel("Price")
 ax.legend()
