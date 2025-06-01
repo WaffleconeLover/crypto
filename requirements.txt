@@ -9,7 +9,4 @@ setuptools
 plotly
 requests
 pytz
-python-binance
-mplfinance
-pytesseract
 time
