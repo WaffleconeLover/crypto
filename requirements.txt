@@ -9,4 +9,3 @@ setuptools
 plotly
 requests
 pytz
-time
