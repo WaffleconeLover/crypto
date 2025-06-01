@@ -1,40 +1,42 @@
-# ETH Price with Liquidation Zones & LP Range (Live, 24h Heikin Ashi + Flush Scoring)
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
 
-# Pull Binance 30-minute ETH/USDT klines (last 24h = 48 candles)
-def get_binance_klines(symbol="ETHUSDT", interval="30m", limit=48):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+# Pull ETH/USDT OHLC data from Moralis (last 24h = 48 candles)
+def get_moralis_ohlcv(symbol="ethusdt", interval="30m", limit=48):
+    api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjgyMDNmNDlmLTMzOWMtNDc5YS04Y2U4LTM0YzI5M2IzODU3YyIsIm9yZ0lkIjoiNDMwOTg5IiwidXNlcklkIjoiNDQzMzM1IiwidHlwZUlkIjoiMmVlOTUxYjAtOTk4ZC00NjRmLWFmZTEtM2FlZDVlNjhhMzE3IiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3MzkzNzI3NTUsImV4cCI6NDg5NTEzMjc1NX0.8GWca9PdAXaJ5ReNTdCKnMQkQ3GdEGPOj67yTw19krM"
+    url = f"https://deep-index.moralis.io/api/v2/market-data/ohlcv/{symbol}?interval={interval}&limit={limit}"
+    headers = {
+        "X-API-Key": api_key
+    }
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
-        data = response.json()
-    except requests.exceptions.RequestException as e:
-        st.error("❌ Failed to fetch Binance data. API may be down or blocked by host.")
+        data = response.json().get("result", [])
+        df = pd.DataFrame(data)
+        df['Open Time'] = pd.to_datetime(df['timestamp'])
+        df.rename(columns={
+            'open': 'Open',
+            'high': 'High',
+            'low': 'Low',
+            'close': 'Close',
+            'volume': 'Volume'
+        }, inplace=True)
+        return df
+    except Exception as e:
+        st.error("❌ Moralis OHLC fetch failed.")
         st.stop()
 
-    return pd.DataFrame(data, columns=[
-        'Open Time', 'Open', 'High', 'Low', 'Close', 'Volume',
-        'Close Time', 'Quote Volume', 'Trades',
-        'Taker Buy Base', 'Taker Buy Quote', 'Ignore'
-    ])
-
-# Get the klines
-klines = get_binance_klines()
-
-# Convert to proper format
-for col in ['Open', 'High', 'Low', 'Close']:
-    klines[col] = klines[col].astype(float)
-klines['Time'] = pd.to_datetime(klines['Open Time'], unit='ms')
+# Fetch data
+klines = get_moralis_ohlcv()
 
 # Compute Heikin Ashi candles
 klines['HA_Close'] = (klines['Open'] + klines['High'] + klines['Low'] + klines['Close']) / 4
 ha_open = [(klines['Open'][0] + klines['Close'][0]) / 2]
 for i in range(1, len(klines)):
-    ha_open.append((ha_open[i-1] + klines['HA_Close'][i-1]) / 2)
+    ha_open.append((ha_open[i - 1] + klines['HA_Close'][i - 1]) / 2)
 klines['HA_Open'] = ha_open
 
 # Simulated liquidation clusters (price levels and $ values)
@@ -67,7 +69,7 @@ for price, value in liquidation_clusters.items():
 fig, ax = plt.subplots(figsize=(12, 6))
 
 # Plot Heikin Ashi price line
-ax.plot(klines['Time'], klines['HA_Close'], label='ETH Price (Heikin Ashi)', color='black')
+ax.plot(klines['Open Time'], klines['HA_Close'], label='ETH Price (Heikin Ashi)', color='black')
 
 # Plot LP range
 ax.axhspan(lp_range[0], lp_range[1], color='green', alpha=0.2, label=f'LP Range {lp_range[0]}–{lp_range[1]}')
@@ -77,7 +79,7 @@ for level, value in liquidation_clusters.items():
     intensity = min(1.0, value / max_value)
     score = flush_scores[level]
     ax.axhspan(level - 1, level + 1, color='red', alpha=intensity * 0.4)
-    ax.text(klines['Time'].iloc[0], level, f"${value:.1f}M\nScore: {score}", fontsize=8, color='darkred', va='center')
+    ax.text(klines['Open Time'].iloc[0], level, f"${value:.1f}M\nScore: {score}", fontsize=8, color='darkred', va='center')
 
 # Formatting
 ax.set_title("ETH Price (Heikin Ashi) with Liquidation Zones, LP Range & Flush Scores")
