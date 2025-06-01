@@ -54,7 +54,7 @@ liquidation_clusters = {
 }
 
 # Manual LP range input
-lp_range = (2575, 2595)
+lp_range = (2359, 2509)
 lp_top = lp_range[1]
 
 # Current ETH price from latest HA close
