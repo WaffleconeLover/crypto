@@ -9,3 +9,4 @@ setuptools
 plotly
 requests
 pytz
+python-binance
