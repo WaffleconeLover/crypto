@@ -7,7 +7,8 @@ import time
 
 st.set_page_config(layout="wide")
 
-@st.cache_data(ttl=60 * 60, show_spinner=False)
+# Cached OHLC fetch from CoinGecko
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_coingecko_ohlc():
     url = "https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days=1"
     response = requests.get(url)
@@ -15,21 +16,25 @@ def get_coingecko_ohlc():
     data = response.json()
     df = pd.DataFrame(data, columns=["timestamp", "Open", "High", "Low", "Close"])
     df["Open Time"] = pd.to_datetime(df["timestamp"], unit="ms")
-    return df, time.time()
+    return df
 
-# Session state for manual refresh
-if "price_data" not in st.session_state:
-    st.session_state.price_data, st.session_state.last_refresh = get_coingecko_ohlc()
+# Initialize session state
+if "price_data" not in st.session_state or "last_refresh" not in st.session_state:
+    st.session_state.price_data = get_coingecko_ohlc()
+    st.session_state.last_refresh = time.time()
 
+# Manual refresh button and timer display
 col1, col2 = st.columns([1, 5])
 with col1:
     if st.button("🔄 Refresh Price"):
-        st.session_state.price_data, st.session_state.last_refresh = get_coingecko_ohlc()
+        st.session_state.price_data = get_coingecko_ohlc()
+        st.session_state.last_refresh = time.time()
 
 elapsed = int(time.time() - st.session_state.last_refresh)
 with col1:
     st.caption(f"⏱️ Last refreshed {elapsed} seconds ago")
 
+# Work on the data
 klines = st.session_state.price_data.copy()
 
 # Compute Heikin Ashi candles
