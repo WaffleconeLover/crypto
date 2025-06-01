@@ -1,13 +1,38 @@
-# Step 1: Prototype overlay with synthetic ETH price + cluster bands
+# ETH Price with Liquidation Zones & LP Range (Live, 24h Heikin Ashi)
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from binance.client import Client
+from datetime import datetime
+import pytz
 
-# Generate synthetic ETH price data (time vs price)
-np.random.seed(42)
-time = pd.date_range(start="2025-06-01 00:00", periods=48, freq="30min")
-price = 2600 + np.cumsum(np.random.randn(len(time)) * 10)  # Simulate ETH price
+# Binance API setup (public access only)
+client = Client()
+symbol = "ETHUSDT"
+interval = Client.KLINE_INTERVAL_30MIN
+
+# Pull last 24 hours of 30m candles (48 candles total)
+klines = client.get_klines(symbol=symbol, interval=interval, limit=48)
+
+# Parse into DataFrame
+data = pd.DataFrame(klines, columns=[
+    'Open Time', 'Open', 'High', 'Low', 'Close', 'Volume',
+    'Close Time', 'Quote Asset Volume', 'Number of Trades',
+    'Taker Buy Base Asset Volume', 'Taker Buy Quote Asset Volume', 'Ignore'
+])
+
+# Convert types
+for col in ['Open', 'High', 'Low', 'Close']:
+    data[col] = data[col].astype(float)
+data['Time'] = pd.to_datetime(data['Open Time'], unit='ms')
+
+# Compute Heikin Ashi candles
+data['HA_Close'] = (data['Open'] + data['High'] + data['Low'] + data['Close']) / 4
+ha_open = [(data['Open'][0] + data['Close'][0]) / 2]
+for i in range(1, len(data)):
+    ha_open.append((ha_open[i-1] + data['HA_Close'][i-1]) / 2)
+data['HA_Open'] = ha_open
 
 # Simulated liquidation clusters (price levels and $ values)
 liquidation_clusters = {
@@ -19,30 +44,30 @@ liquidation_clusters = {
     2525: 5.0
 }
 
-# Step 2: Add manual LP range
-lp_range = (2359, 2509)  # Example LP range
+# Step 2: Manual LP range input
+lp_range = (2575, 2595)
 
 # Plotting
 fig, ax = plt.subplots(figsize=(12, 6))
 
-# Plot ETH price
-ax.plot(time, price, label='ETH Price', color='black')
+# Plot Heikin Ashi price line
+ax.plot(data['Time'], data['HA_Close'], label='ETH Price (Heikin Ashi)', color='black')
 
-# Plot LP range band
+# Plot LP range
 ax.axhspan(lp_range[0], lp_range[1], color='green', alpha=0.2, label=f'LP Range {lp_range[0]}–{lp_range[1]}')
 
-# Plot liquidation cluster bands
+# Plot liquidation clusters
 for level, value in liquidation_clusters.items():
-    color_intensity = min(1.0, value / max(liquidation_clusters.values()))
-    ax.axhspan(level - 1, level + 1, color='red', alpha=color_intensity * 0.4)
-    ax.text(time[0], level, f"${value:.1f}M", verticalalignment='center', fontsize=8, color='darkred')
+    intensity = min(1.0, value / max(liquidation_clusters.values()))
+    ax.axhspan(level - 1, level + 1, color='red', alpha=intensity * 0.4)
+    ax.text(data['Time'].iloc[0], level, f"${value:.1f}M", fontsize=8, color='darkred', va='center')
 
 # Formatting
-ax.set_title("ETH Price with Liquidation Zones & LP Range")
+ax.set_title("ETH Price (Heikin Ashi) with Liquidation Zones & LP Range")
 ax.set_xlabel("Time")
 ax.set_ylabel("Price")
 ax.legend()
 ax.grid(True)
 
-# Render the plot in Streamlit
+# Display in Streamlit
 st.pyplot(fig)
