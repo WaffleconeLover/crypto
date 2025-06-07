@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
+import mplfinance as mpf  # <-- added
 from datetime import datetime
 
 st.set_page_config(layout="wide")
@@ -102,25 +103,34 @@ if st.button("Submit Band Info") and band_input:
         df.set_index("timestamp", inplace=True)
         ha_df = compute_heikin_ashi(df)
 
-        # -- Plot Charts --
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        # -- mplfinance plot (candles) --
+        ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
+        ha_plot_df.index.name = "Date"
 
-        # Chart 1: Heikin-Ashi + Band Range
-        ax1.plot(ha_df.index, ha_df["close"], label="ETH Price", color="green")
-        ax1.axhline(band_min, color="orange", linestyle="--", label="Min")
-        ax1.axhline(band_max, color="darkgreen", linestyle="--", label="Max")
-        ax1.set_title("Band 1 Range")
-        ax1.set_ylabel("Price")
-        ax1.legend()
+        ap_lines = [
+            mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
+            mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
+        ]
 
-        # Chart 2: Drawdowns from ETH spot
-        ax2.axhline(eth_price * 0.95, linestyle="--", label=f"5% Down = {int(eth_price * 0.95)}", color="skyblue")
-        ax2.axhline(eth_price * 0.90, linestyle="--", label=f"10% Down = {int(eth_price * 0.90)}", color="skyblue")
-        ax2.axhline(eth_price * 0.85, linestyle="--", label=f"15% Down = {int(eth_price * 0.85)}", color="skyblue")
+        fig_mpf, _ = mpf.plot(
+            ha_plot_df,
+            type='candle',
+            style='charles',
+            ylabel="Price",
+            title="Band 1 Range (Heikin-Ashi)",
+            addplot=ap_lines,
+            figsize=(10, 5),
+            returnfig=True
+        )
+        st.pyplot(fig_mpf)
+
+        # -- Drawdowns (matplotlib) --
+        fig, ax2 = plt.subplots(figsize=(10, 3))
+        for label, price in dd_levels:
+            ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
         ax2.set_title("Band 1 Drawdowns")
         ax2.set_ylabel("Price")
         ax2.legend()
-
         st.pyplot(fig)
 
     except Exception as e:
