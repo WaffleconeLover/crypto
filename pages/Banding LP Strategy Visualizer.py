@@ -1,106 +1,99 @@
 import streamlit as st
 import requests
-import datetime
-import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
 
-# Optional: Lock Critical UI Elements (do not remove)
-st.markdown("<h2>ETH Liquidity Band Dashboard</h2>", unsafe_allow_html=True)
+st.set_page_config(layout="wide")
+st.title("ETH Liquidity Band Dashboard")
 
-# Session State Initialization
-if "eth_price" not in st.session_state:
-    st.session_state.eth_price = ""
+# -- Constants --
+DEXSCREENER_API = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+COINGECKO_API = "https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days=1"
 
-if "band_data" not in st.session_state:
-    st.session_state.band_data = ""
-
-# --- Price Fetching ---
-def fetch_eth_price():
-    url = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+# -- Fetch ETH price from Dexscreener --
+@st.cache_data(ttl=60)
+def fetch_eth_spot():
     try:
-        res = requests.get(url)
-        data = res.json()
-        return round(float(data["pair"]["priceUsd"]), 2)
-    except Exception as e:
-        st.warning(f"Failed to fetch ETH price: {e}")
+        r = requests.get(DEXSCREENER_API)
+        r.raise_for_status()
+        data = r.json()
+        return float(data["pair"]["priceUsd"])
+    except:
         return None
 
-# --- UI Elements ---
+# -- Fetch OHLC data from CoinGecko for candles --
+@st.cache_data(ttl=300)
+def fetch_eth_candles():
+    try:
+        r = requests.get(COINGECKO_API)
+        r.raise_for_status()
+        raw = r.json()
+        df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        return df
+    except:
+        return None
+
+# -- UI --
 st.subheader("1. Refresh ETH Price")
-if st.button("🔄 Refresh ETH Price"):
-    price = fetch_eth_price()
-    if price:
-        st.session_state.eth_price = price
+col1, col2 = st.columns([2, 2])
 
-if st.session_state.eth_price:
-    st.write(f"**Latest ETH Price:** ${st.session_state.eth_price}")
+with col1:
+    if st.button("Refresh ETH Price"):
+        st.session_state.eth_price = fetch_eth_spot()
+
+eth_price = st.session_state.get("eth_price", fetch_eth_spot())
+if eth_price:
+    st.markdown(f"**Latest ETH Price:** ${eth_price:,.2f}")
+else:
+    st.error("Failed to fetch ETH price data.")
 
 st.markdown("---")
-
 st.subheader("2. Paste Band Data")
-st.session_state.band_data = st.text_area("Paste band and drawdown data below:", st.session_state.band_data, height=250)
+st.caption("Paste band and drawdown data below:")
+band_input = st.text_area("Band Data Input", height=150)
 
-if st.button("Submit Band Info"):
-    st.session_state.submitted_text = st.session_state.band_data
-
-st.markdown("---")
-
-# --- Parsing & Chart Rendering ---
-def parse_data_block(block):
-    lines = block.strip().split("\n")
+if st.button("Submit Band Info") and band_input:
+    lines = band_input.strip().split("\n")
     band_line = lines[0]
-    drawdowns = lines[1:]
+    dd_lines = lines[1:]
 
-    # Extract band range info
-    parts = band_line.split("|")
-    label = parts[0].strip()
-    min_price = float(parts[1].split("=")[1])
-    max_price = float(parts[2].split("=")[1])
+    try:
+        # -- Parse Band --
+        parts = {kv.split("=")[0].strip(): float(kv.split("=")[1]) for kv in band_line.split("|") if "=" in kv}
+        band_min = parts["Min"]
+        band_max = parts["Max"]
 
-    # Extract drawdown levels
-    dd_lines = [l for l in drawdowns if l.strip() and "% Down" in l]
-    dd_data = []
-    for line in dd_lines:
-        tokens = line.split("|")
-        level = tokens[0].strip()
-        level_price = float(tokens[0].split("=")[1])
-        liq_price = float(tokens[1].split("=")[1])
-        dist = float(tokens[2].split("=")[1])
-        liq_drop = float(tokens[3].split("=")[1])
-        dd_data.append((level, level_price, liq_price, dist, liq_drop))
+        # -- Parse Drawdowns --
+        dd_levels = []
+        for line in dd_lines:
+            dd_parts = {kv.split("=")[0].strip(): float(kv.split("=")[1]) for kv in line.split("|") if "=" in kv}
+            label = line.split("=")[0].strip()
+            dd_levels.append((label, dd_parts["Liq. Price"]))
 
-    return label, min_price, max_price, dd_data
+        # -- Plot Charts --
+        df = fetch_eth_candles()
 
-def render_band_chart(label, min_p, max_p):
-    st.write(f"**{label} Range Chart**")
-    eth = st.session_state.eth_price
-    fig, ax = plt.subplots()
-    ax.axhline(y=min_p, color='orange', linestyle='--', label='Min')
-    ax.axhline(y=max_p, color='green', linestyle='--', label='Max')
-    if eth and min_p <= eth <= max_p:
-        ax.axhline(y=eth, color='blue', linewidth=2, label='ETH Price')
-    ax.set_ylim(min_p - 200, max_p + 200)
-    ax.set_title(f"{label} Range")
-    ax.set_ylabel("Price")
-    ax.legend()
-    st.pyplot(fig)
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
-def render_drawdown_chart(label, drawdowns):
-    st.write(f"**{label} Drawdowns Chart**")
-    fig, ax = plt.subplots()
-    for level, price, _, _, _ in drawdowns:
-        ax.axhline(y=price, linestyle='--', label=level)
-    ax.set_title(f"{label} Drawdowns")
-    ax.set_ylabel("Price")
-    ax.legend()
-    st.pyplot(fig)
+        # Chart 1: Candlestick + Range
+        if df is not None:
+            ax1.plot(df["timestamp"], df["close"], label="ETH Price", color="green")
+        ax1.axhline(band_min, color="orange", linestyle="--", label="Min")
+        ax1.axhline(band_max, color="green", linestyle="--", label="Max")
+        ax1.set_title("Band 1 Range")
+        ax1.set_ylabel("Price")
+        ax1.legend()
 
-# Trigger render if data submitted
-if st.session_state.get("submitted_text"):
-    blocks = st.session_state.submitted_text.strip().split("\n\n")
-    for block in blocks:
-        label, min_p, max_p, drawdowns = parse_data_block(block)
-        render_band_chart(label, min_p, max_p)
-        render_drawdown_chart(label, drawdowns)
-        st.markdown("---")
+        # Chart 2: Drawdowns
+        for label, price in dd_levels:
+            ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
+        ax2.set_title("Band 1 Drawdowns")
+        ax2.set_ylabel("Price")
+        ax2.legend()
+
+        st.pyplot(fig)
+
+    except Exception as e:
+        st.error(f"Failed to parse data or generate chart: {e}")
