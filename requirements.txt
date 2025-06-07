@@ -10,3 +10,6 @@ plotly
 requests
 pytz
 mplfinance
+gspread
+google-auth
+oauth2client
