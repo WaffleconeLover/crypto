@@ -67,71 +67,71 @@ st.subheader("2. Paste Band Data")
 st.caption("Paste band and drawdown data below:")
 band_input = st.text_area("Band Data Input", height=150)
 
-if st.button("Submit Band Info") and band_input:
+# -- Render charts function --
+def render_charts(band_input):
     lines = band_input.strip().split("\n")
     band_line = lines[0]
     dd_lines = lines[1:]
 
-    try:
-        # -- Parse Band --
-        parts = {}
-        band_label = "Band"  # fallback
-        if "|" in band_line and "=" in band_line:
-            band_label = band_line.split("|")[0].strip()
+    parts = {}
+    band_label = "Band"
+    if "|" in band_line and "=" in band_line:
+        band_label = band_line.split("|")[0].strip()
 
-        for kv in band_line.split("|"):
-            if "=" in kv:
-                key, val = kv.split("=")
-                key = key.strip()
-                val = val.strip().replace("%", "")
-                parts[key] = float(val)
+    for kv in band_line.split("|"):
+        if "=" in kv:
+            key, val = kv.split("=")
+            key = key.strip()
+            val = val.strip().replace("%", "")
+            parts[key] = float(val)
 
-        band_min = parts["Min"]
-        band_max = parts["Max"]
+    band_min = parts["Min"]
+    band_max = parts["Max"]
 
-        # -- Parse Drawdowns from "X Down = Y" format --
-        dd_levels = []
-        for line in dd_lines:
-            for kv in line.split("|"):
-                if "Down" in kv and "=" in kv:
-                    label, val = kv.split("=")
-                    dd_levels.append((label.strip(), float(val.strip())))
-                    break
+    dd_levels = []
+    for line in dd_lines:
+        for kv in line.split("|"):
+            if "Down" in kv and "=" in kv:
+                label, val = kv.split("=")
+                dd_levels.append((label.strip(), float(val.strip())))
+                break
 
-        # -- Get data and convert to HA candles --
-        df = fetch_eth_candles()
-        df.set_index("timestamp", inplace=True)
-        ha_df = compute_heikin_ashi(df)
+    df = fetch_eth_candles()
+    df.set_index("timestamp", inplace=True)
+    ha_df = compute_heikin_ashi(df)
+    ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
+    ha_plot_df.index.name = "Date"
 
-        # -- mplfinance plot (candles) --
-        ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
-        ha_plot_df.index.name = "Date"
+    ap_lines = [
+        mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
+        mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
+    ]
 
-        ap_lines = [
-            mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
-            mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
-        ]
+    fig_mpf, _ = mpf.plot(
+        ha_plot_df,
+        type='candle',
+        style='charles',
+        ylabel="Price",
+        title=f"{band_label} Range (Heikin-Ashi)",
+        addplot=ap_lines,
+        figsize=(10, 5),
+        returnfig=True
+    )
+    st.pyplot(fig_mpf)
 
-        fig_mpf, _ = mpf.plot(
-            ha_plot_df,
-            type='candle',
-            style='charles',
-            ylabel="Price",
-            title=f"{band_label} Range (Heikin-Ashi)",
-            addplot=ap_lines,
-            figsize=(10, 5),
-            returnfig=True
-        )
-        st.pyplot(fig_mpf)
+    fig, ax2 = plt.subplots(figsize=(10, 3))
+    for label, price in dd_levels:
+        ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
+    ax2.set_title(f"{band_label} Drawdowns")
+    ax2.set_ylabel("Price")
+    ax2.legend()
+    st.pyplot(fig)
 
-        # -- Drawdowns using actual pasted values --
-        fig, ax2 = plt.subplots(figsize=(10, 3))
-        for label, price in dd_levels:
-            ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
-        ax2.set_title(f"{band_label} Drawdowns")
-        ax2.set_ylabel("Price")
-        ax2.legend()
-        st.pyplot(fig)
+# -- Handle submission --
+if st.button("Submit Band Info") and band_input:
+    st.session_state.band_input = band_input
+    render_charts(band_input)
 
-    except Exception as e:
-        st.error(f"Failed to parse data or generate chart: {e}")
+# -- Redraw charts if both price and band data exist --
+if eth_price and "band_input" in st.session_state:
+    render_charts(st.session_state.band_input)
