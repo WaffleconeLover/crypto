@@ -53,12 +53,13 @@ raw_input = st.text_area("Paste Band Chart Setups Text", height=300)
 
 # Parse text input
 bands = []
+liquidation_levels = []
 if raw_input:
     for line in raw_input.splitlines():
-        if "|" in line and "Min" in line and "Max" in line and "Liq. Price" in line:
-            parts = [p.strip() for p in line.split('|')]
-            try:
-                band_id = parts[0].split()[1] if parts[0].lower().startswith("band") else str(len(bands) + 1)
+        parts = [p.strip() for p in line.split('|')]
+        try:
+            if line.lower().startswith("band"):
+                band_id = parts[0].split()[1]
                 band_min = float(parts[1].split('=')[-1].strip())
                 band_max = float(parts[2].split('=')[-1].strip())
                 liq_price = float(parts[4].split('=')[-1].strip())
@@ -70,8 +71,12 @@ if raw_input:
                     "Liq Price": liq_price,
                     "Liq Drop %": liq_drop
                 })
-            except Exception as e:
-                st.warning(f"Could not parse: {line} — {e}")
+            elif "Down" in line and "Liq. Price" in line:
+                label = parts[0].split('=')[0].strip()
+                level = float(parts[0].split('=')[-1].strip())
+                liquidation_levels.append((label, level))
+        except Exception as e:
+            st.warning(f"Could not parse: {line} — {e}")
 
 # Plot chart
 if bands:
@@ -99,15 +104,6 @@ if bands:
                 f"{row['Band']}\n${row['Min']} - ${row['Max']}\nLiq: ${row['Liq Price']} ({row['Liq Drop %']}%)",
                 va='center', fontsize=8)
 
-    # Set Y-axis to 1% buffer around min/max of both candles and band ranges
-    combined_min = min(df_bands['Min'].min(), ha['low'].min())
-    combined_max = max(df_bands['Max'].max(), ha['high'].max())
-    ax.set_ylim(combined_min * 0.99, combined_max * 1.01)
-
-    ax.set_xlim(ha.index[0], ha.index[-1])
-    ax.set_title("Liquidity Bands and Liquidation Zones")
-    ax.set_ylabel("ETH Price")
-    ax.legend()
-    st.pyplot(fig)
-else:
-    st.info("Paste your Band Chart Setups to visualize the ranges.")
+    # Add liquidation lines
+    for label, price in liquidation_levels:
+        ax.axhline(
