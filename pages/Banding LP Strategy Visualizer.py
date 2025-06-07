@@ -33,22 +33,24 @@ raw_input = st.text_area("Paste Band Chart Setups Text", height=300)
 if raw_input:
     # --- Parse band info ---
     bands = []
-    for line in raw_input.splitlines():
-        if line.strip().startswith("Band") and "|" in line:
-            parts = [p.strip() for p in line.split('|')]
-            if len(parts) >= 5:
-                band_id = parts[0].split()[1]
-                band_min = float(parts[1].split('=')[1].strip())
-                band_max = float(parts[2].split('=')[1].strip())
-                liq_price = float(parts[3].split('=')[1].strip())
-                liq_drop = float(parts[4].split('=')[1].strip().replace('%', ''))
-                bands.append({
-                    'Band': f'Band {band_id}',
-                    'Min': band_min,
-                    'Max': band_max,
-                    'Liq Price': liq_price,
-                    'Liq Drop %': liq_drop
-                })
+ for line in raw_input.splitlines():
+    if "|" in line and "Min" in line and "Max" in line and "Liq. Price" in line:
+        parts = [p.strip() for p in line.split('|')]
+        try:
+            band_id = parts[0].split()[1] if parts[0].lower().startswith('band') else str(len(bands) + 1)
+            band_min = float(parts[1].split('=')[-1].strip())
+            band_max = float(parts[2].split('=')[-1].strip())
+            liq_price = float(parts[3].split('=')[-1].strip())
+            liq_drop = float(parts[4].split('=')[-1].strip().replace('%', ''))
+            bands.append({
+                'Band': f'Band {band_id}',
+                'Min': band_min,
+                'Max': band_max,
+                'Liq Price': liq_price,
+                'Liq Drop %': liq_drop
+            })
+        except Exception as e:
+            st.warning(f\"Failed to parse line: {line}\\nError: {e}\")
 
     # --- Convert to DataFrame ---
     df = pd.DataFrame(bands)
