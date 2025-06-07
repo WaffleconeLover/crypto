@@ -61,14 +61,27 @@ if st.button("Submit Band Info") and band_input:
 
     try:
         # -- Parse Band --
-        parts = {kv.split("=")[0].strip(): float(kv.split("=")[1]) for kv in band_line.split("|") if "=" in kv}
+        parts = {}
+        for kv in band_line.split("|"):
+            if "=" in kv:
+                key, val = kv.split("=")
+                key = key.strip()
+                val = val.strip().replace("%", "")  # FIXED HERE
+                parts[key] = float(val)
+
         band_min = parts["Min"]
         band_max = parts["Max"]
 
         # -- Parse Drawdowns --
         dd_levels = []
         for line in dd_lines:
-            dd_parts = {kv.split("=")[0].strip(): float(kv.split("=")[1]) for kv in line.split("|") if "=" in kv}
+            dd_parts = {}
+            for kv in line.split("|"):
+                if "=" in kv:
+                    key, val = kv.split("=")
+                    key = key.strip()
+                    val = val.strip().replace("%", "")  # FIXED HERE
+                    dd_parts[key] = float(val)
             label = line.split("=")[0].strip()
             dd_levels.append((label, dd_parts["Liq. Price"]))
 
