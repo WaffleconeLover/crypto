@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
-import mplfinance as mpf  # <-- added
+import mplfinance as mpf
 from datetime import datetime
 
 st.set_page_config(layout="wide")
@@ -124,7 +124,7 @@ if st.button("Submit Band Info") and band_input:
         )
         st.pyplot(fig_mpf)
 
-        # -- Drawdowns (matplotlib) --
+        # -- Drawdowns using actual pasted values --
         fig, ax2 = plt.subplots(figsize=(10, 3))
         for label, price in dd_levels:
             ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
