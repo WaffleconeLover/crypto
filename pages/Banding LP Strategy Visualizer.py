@@ -67,17 +67,16 @@ st.subheader("2. Paste Band Data")
 st.caption("Paste band and drawdown data below:")
 band_input = st.text_area("Band Data Input", height=150)
 
-if st.button("Submit Band Info") and band_input:
-    lines = band_input.strip().split("\n")
+# -- Chart rendering function --
+def render_charts(input_text):
+    lines = input_text.strip().split("\n")
     band_line = lines[0]
     dd_lines = lines[1:]
 
     try:
         # -- Parse Band --
         parts = {}
-        band_label = "Band"  # fallback
-        if "|" in band_line and "=" in band_line:
-            band_label = band_line.split("|")[0].strip()
+        band_label = band_line.split("|")[0].strip() if "|" in band_line else "Band"
 
         for kv in band_line.split("|"):
             if "=" in kv:
@@ -135,3 +134,11 @@ if st.button("Submit Band Info") and band_input:
 
     except Exception as e:
         st.error(f"Failed to parse data or generate chart: {e}")
+
+# -- On submit: store band input
+if st.button("Submit Band Info") and band_input:
+    st.session_state.band_input = band_input.strip()
+
+# -- Re-render chart if band_input exists in session (e.g. after refresh)
+if "band_input" in st.session_state:
+    render_charts(st.session_state["band_input"])
