@@ -25,7 +25,7 @@ def fetch_eth_spot():
 
 # -- Fetch OHLC data from CoinGecko for candles --
 @st.cache_data(ttl=300)
-def fetch_eth_candles(dummy_cache_buster=None):  # added param
+def fetch_eth_candles(dummy_cache_buster=None):  # for chart updates on refresh
     try:
         r = requests.get(COINGECKO_API)
         r.raise_for_status()
@@ -55,7 +55,7 @@ col1, col2 = st.columns([2, 2])
 with col1:
     if st.button("Refresh ETH Price"):
         st.session_state.eth_price = fetch_eth_spot()
-        st.session_state.last_refresh = datetime.now().isoformat()  # set timestamp
+        st.session_state.last_refresh = datetime.now().isoformat()
 
 eth_price = st.session_state.get("eth_price", fetch_eth_spot())
 if eth_price:
@@ -89,7 +89,7 @@ def render_charts(input_text):
         band_min = parts["Min"]
         band_max = parts["Max"]
 
-        # -- Parse Drawdowns from "X Down = Y" format --
+        # -- Parse Drawdowns --
         dd_levels = []
         for line in dd_lines:
             for kv in line.split("|"):
@@ -98,12 +98,15 @@ def render_charts(input_text):
                     dd_levels.append((label.strip(), float(val.strip())))
                     break
 
+        # -- Show inline band metadata (in red) above chart --
+        st.markdown(f"<div style='text-align:center; color:red; font-weight:bold;'>{band_line}</div>", unsafe_allow_html=True)
+
         # -- Get data and convert to HA candles --
-        df = fetch_eth_candles(st.session_state.get("last_refresh"))  # bust cache if needed
+        df = fetch_eth_candles(st.session_state.get("last_refresh"))
         df.set_index("timestamp", inplace=True)
         ha_df = compute_heikin_ashi(df)
 
-        # -- mplfinance plot (candles) --
+        # -- Plot main chart --
         ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
         ha_plot_df.index.name = "Date"
 
@@ -124,7 +127,7 @@ def render_charts(input_text):
         )
         st.pyplot(fig_mpf)
 
-        # -- Drawdowns using actual pasted values --
+        # -- Drawdowns chart --
         fig, ax2 = plt.subplots(figsize=(10, 3))
         for label, price in dd_levels:
             ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
@@ -140,6 +143,6 @@ def render_charts(input_text):
 if st.button("Submit Band Info") and band_input:
     st.session_state.band_input = band_input.strip()
 
-# -- Re-render chart if band_input exists in session (e.g. after refresh)
+# -- Redraw charts if band_input is stored
 if "band_input" in st.session_state:
     render_charts(st.session_state["band_input"])
