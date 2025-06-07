@@ -25,7 +25,7 @@ def fetch_eth_spot():
 
 # -- Fetch OHLC data from CoinGecko for candles --
 @st.cache_data(ttl=300)
-def fetch_eth_candles():
+def fetch_eth_candles(dummy_cache_buster=None):  # added param
     try:
         r = requests.get(COINGECKO_API)
         r.raise_for_status()
@@ -55,6 +55,7 @@ col1, col2 = st.columns([2, 2])
 with col1:
     if st.button("Refresh ETH Price"):
         st.session_state.eth_price = fetch_eth_spot()
+        st.session_state.last_refresh = datetime.now().isoformat()  # set timestamp
 
 eth_price = st.session_state.get("eth_price", fetch_eth_spot())
 if eth_price:
@@ -98,7 +99,7 @@ def render_charts(input_text):
                     break
 
         # -- Get data and convert to HA candles --
-        df = fetch_eth_candles()
+        df = fetch_eth_candles(st.session_state.get("last_refresh"))  # bust cache if needed
         df.set_index("timestamp", inplace=True)
         ha_df = compute_heikin_ashi(df)
 
