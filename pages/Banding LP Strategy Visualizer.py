@@ -99,7 +99,12 @@ if bands:
                 f"{row['Band']}\n${row['Min']} - ${row['Max']}\nLiq: ${row['Liq Price']} ({row['Liq Drop %']}%)",
                 va='center', fontsize=8)
 
-    ax.set_ylim(min(df_bands['Liq Price'].min(), eth_price) * 0.95, df_bands['Max'].max() * 1.05)
+    # Tighter y-axis range around actual prices
+    price_min = min(ha['low'].min(), df_bands['Liq Price'].min(), df_bands['Min'].min())
+    price_max = max(ha['high'].max(), df_bands['Max'].max())
+    buffer = 0.10 * (price_max - price_min)
+    ax.set_ylim(price_min - buffer, price_max + buffer)
+
     ax.set_xlim(ha.index[0], ha.index[-1])
     ax.set_title("Liquidity Bands and Liquidation Zones")
     ax.set_ylabel("ETH Price")
