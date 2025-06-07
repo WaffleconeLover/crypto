@@ -47,25 +47,14 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
-def load_google_sheet_text(sheet_id, tab_name="BandSetup"):
+def load_google_sheet_text(sheet_id, tab_name="BandSetup", cell_range="B14:B17"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     creds = Credentials.from_service_account_file("creds.json", scopes=scope)
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
-    values = worksheet.col_values(1)[:10]  # read first 10 lines of column A
-    return "\n".join(v for v in values if v.strip())
-
-def load_google_sheet_structured(sheet_id, tab_name="BandSetup"):
-    scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds = Credentials.from_service_account_file("creds.json", scopes=scope)
-    gc = gspread.authorize(creds)
-    sh = gc.open_by_key(sheet_id)
-    worksheet = sh.worksheet(tab_name)
-    rows = worksheet.get_all_values()
-    df = pd.DataFrame(rows[1:5], columns=rows[0])
-    for col in ["Min", "Max", "Liq", "Down5", "Down10", "Down15"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
+    cells = worksheet.get(cell_range)
+    lines = [row[0] for row in cells if row and row[0].strip()]
+    return lines
 
 def load_csv():
     return pd.read_csv("data/bands.csv")
@@ -215,8 +204,23 @@ if mode == "Manual":
 elif mode == "From Google Sheet":
     sheet_id = "1lYMzXhF_bP1cCFLyHUmXHCZv4WbAHh2QwFvD-AdhAQY"
     tab_name = "BandSetup"
+
+    band_option = st.selectbox(
+        "Select Band to Load from Sheet",
+        ["Band 1", "Band 2", "Band 3", "Band 4"]
+    )
+
+    band_ranges = {
+        "Band 1": "B14:B17",
+        "Band 2": "B18:B21",
+        "Band 3": "B22:B25",
+        "Band 4": "B26:B29"
+    }
+
     try:
-        band_text = load_google_sheet_text(sheet_id, tab_name)
+        cell_range = band_ranges[band_option]
+        lines = load_google_sheet_text(sheet_id, tab_name, cell_range)
+        band_text = "\n".join(lines)
         st.text_area("Band Data Pulled from Sheet", band_text, height=150)
         if band_text:
             render_charts(band_text)
