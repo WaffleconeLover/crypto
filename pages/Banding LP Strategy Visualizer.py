@@ -55,6 +55,7 @@ col1, col2 = st.columns([2, 2])
 with col1:
     if st.button("Refresh ETH Price"):
         st.session_state.eth_price = fetch_eth_spot()
+        st.rerun()  # <-- ensures chart refresh on updated ETH price
 
 eth_price = st.session_state.get("eth_price", fetch_eth_spot())
 if eth_price:
@@ -127,11 +128,16 @@ def render_charts(band_input):
     ax2.legend()
     st.pyplot(fig)
 
-# -- Handle submission --
-if st.button("Submit Band Info") and band_input:
-    st.session_state.band_input = band_input
-    render_charts(band_input)
+# -- Handle submission with rerun guard --
+if st.button("Submit Band Info"):
+    st.session_state.band_input = band_input.strip()
+    st.session_state.submitted_this_session = True
+    st.rerun()
 
-# -- Redraw charts if both price and band data exist --
-if eth_price and "band_input" in st.session_state:
-    render_charts(st.session_state.band_input)
+# -- Redraw charts only after rerun or when reloading --
+if eth_price and st.session_state.get("band_input") and not st.session_state.get("submitted_this_session"):
+    render_charts(st.session_state["band_input"])
+
+# -- Reset guard flag after rendering once --
+if st.session_state.get("submitted_this_session"):
+    st.session_state.submitted_this_session = False
