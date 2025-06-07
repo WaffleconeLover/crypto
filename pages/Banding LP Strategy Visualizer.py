@@ -35,8 +35,8 @@ if raw_input:
                 band_id = parts[0].split()[1] if parts[0].lower().startswith("band") else str(len(bands) + 1)
                 band_min = float(parts[1].split('=')[-1].strip())
                 band_max = float(parts[2].split('=')[-1].strip())
-                liq_price = float(parts[3].split('=')[-1].strip())
-                liq_drop = float(parts[4].split('=')[-1].replace('%', '').strip())
+                liq_price = float(parts[4].split('=')[-1].strip())
+                liq_drop = float(parts[5].split('=')[-1].replace('%', '').strip())
                 bands.append({
                     "Band": f"Band {band_id}",
                     "Min": band_min,
@@ -45,7 +45,7 @@ if raw_input:
                     "Liq Drop %": liq_drop
                 })
             except Exception as e:
-                st.warning(f"Could not parse: `{line}` — {e}")
+                st.warning(f"Could not parse: {line} — {e}")
 
 # Plot chart
 if bands:
