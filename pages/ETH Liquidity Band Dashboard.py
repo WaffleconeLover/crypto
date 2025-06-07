@@ -47,7 +47,15 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
-def load_google_sheet(sheet_id, tab_name="BandSetup"):
+def load_google_sheet_text(sheet_id, tab_name="BandSetup"):
+    scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    creds = Credentials.from_service_account_file("creds.json", scopes=scope)
+    gc = gspread.authorize(creds)
+    worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
+    values = worksheet.col_values(1)[:10]  # read first 10 lines of column A
+    return "\n".join(v for v in values if v.strip())
+
+def load_google_sheet_structured(sheet_id, tab_name="BandSetup"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     creds = Credentials.from_service_account_file("creds.json", scopes=scope)
     gc = gspread.authorize(creds)
@@ -108,6 +116,81 @@ def render_chart_from_row(row, eth_price=None):
     ax2.legend()
     st.pyplot(fig)
 
+def render_charts(input_text):
+    lines = input_text.strip().split("\n")
+    band_line = lines[0]
+    dd_lines = lines[1:]
+
+    try:
+        parts = {}
+        band_label = band_line.split("|")[0].strip() if "|" in band_line else "Band"
+
+        for kv in band_line.split("|"):
+            if "=" in kv:
+                key, val = kv.split("=")
+                key = key.strip()
+                val = val.strip().replace("%", "")
+                parts[key] = float(val)
+
+        band_min = parts["Min"]
+        band_max = parts["Max"]
+        band_mid = (band_min + band_max) / 2
+
+        dd_levels = []
+        for line in dd_lines:
+            for kv in line.split("|"):
+                if "Down" in kv and "=" in kv:
+                    label, val = kv.split("=")
+                    dd_levels.append((label.strip(), float(val.strip())))
+                    break
+
+        df = fetch_eth_candles()
+        df.set_index("timestamp", inplace=True)
+        ha_df = compute_heikin_ashi(df)
+        ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
+        ha_plot_df.index.name = "Date"
+
+        ap_lines = [
+            mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
+            mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
+        ]
+
+        fig_mpf, ax_mpf = mpf.plot(
+            ha_plot_df,
+            type='candle',
+            style='charles',
+            ylabel="Price",
+            title=f"{band_label} Range (Heikin-Ashi)",
+            addplot=ap_lines,
+            figsize=(10, 5),
+            returnfig=True
+        )
+
+        ax_mpf[0].text(
+            0.5,
+            band_mid,
+            band_line.strip(),
+            transform=ax_mpf[0].get_yaxis_transform(),
+            ha="center",
+            va="center",
+            color="red",
+            fontsize=10,
+            bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
+        )
+
+        st.pyplot(fig_mpf)
+
+        fig, ax2 = plt.subplots(figsize=(10, 3))
+        for label, price in dd_levels:
+            ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
+        ax2.set_title(f"{band_label} Drawdowns")
+        ax2.set_ylabel("Price")
+        ax2.legend()
+        st.pyplot(fig)
+
+    except Exception as e:
+        st.error(f"Failed to parse data or generate chart: {e}")
+
 # ---- MAIN LOGIC ----
 mode = st.radio("Data Source Mode", ["Manual", "From Google Sheet", "From CSV"])
 
@@ -124,20 +207,25 @@ else:
 if mode == "Manual":
     st.subheader("Paste Band Data")
     band_input = st.text_area("Band Data Input", height=150)
-
     if st.button("Submit Band Info") and band_input:
         st.session_state.band_input = band_input.strip()
-
     if "band_input" in st.session_state:
-        # Original rendering logic retained
-        st.info("Manual mode currently uses the original rendering logic.")
+        render_charts(st.session_state["band_input"])
 
 elif mode == "From Google Sheet":
     sheet_id = "1lYMzXhF_bP1cCFLyHUmXHCZv4WbAHh2QwFvD-AdhAQY"
-    df_bands = load_google_sheet(sheet_id)
-    if not df_bands.empty:
-        for _, row in df_bands.iterrows():
-            render_chart_from_row(row, eth_price)
+    tab_name = "BandSetup"
+    try:
+        band_text = load_google_sheet_text(sheet_id, tab_name)
+        st.text_area("Band Data Pulled from Sheet", band_text, height=150)
+        if band_text:
+            render_charts(band_text)
+    except Exception as e:
+        st.error(f"Failed to load sheet: {e}")
+        st.info("Falling back to manual input:")
+        band_input = st.text_area("Paste Band Data", height=150)
+        if st.button("Submit Band Info") and band_input:
+            render_charts(band_input.strip())
 
 elif mode == "From CSV":
     df_bands = load_csv()
