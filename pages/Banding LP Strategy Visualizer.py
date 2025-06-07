@@ -7,7 +7,11 @@ from datetime import datetime, timedelta
 st.set_page_config(layout="wide")
 st.title("Banding LP Chart Builder")
 
-eth_price = st.session_state.get("eth_price", None)
+# ======================
+# ETH PRICE FETCH + FALLBACK
+# ======================
+fallback_price = 2500
+eth_price = st.session_state.get("eth_price", fallback_price)
 
 def fetch_eth_price():
     try:
@@ -17,23 +21,28 @@ def fetch_eth_price():
         return None
 
 if st.button("Refresh ETH Price"):
-    eth_price = fetch_eth_price()
-    if eth_price:
-        st.session_state.eth_price = eth_price
+    eth = fetch_eth_price()
+    if eth:
+        st.session_state.eth_price = eth
+        eth_price = eth
     else:
         st.error("Failed to retrieve ETH price data from CoinGecko.")
-
-fallback_price = 2500  # or your most recent known ETH price
+        eth_price = fallback_price
 
 if eth_price:
-    st.markdown(f"**Current ETH Price:** ${eth_price}")
+    st.markdown(f"**Current ETH Price:** ${eth_price:.2f}")
 else:
     st.markdown(f"**Current ETH Price:** _Not Available — using fallback (${fallback_price})_")
     eth_price = fallback_price
-)
 
+# ======================
+# INPUT FIELD
+# ======================
 user_input = st.text_area("Paste Band Data Here:")
 
+# ======================
+# CHART PARSING + RENDER
+# ======================
 if st.button("Generate Chart") and user_input:
     lines = [line.strip() for line in user_input.strip().split("\n") if line.strip()]
     bands = []
@@ -56,8 +65,7 @@ if st.button("Generate Chart") and user_input:
                     "drop": float(parts["Liq. Drop %"]),
                 })
             except Exception as e:
-                st.warning(f"Failed to parse line: {line} — {e}")
-
+                st.warning(f"Failed to parse band line: {line} — {e}")
         elif line.startswith(("5", "10", "15")):
             try:
                 pct = line.split("%")[0].strip()
@@ -75,7 +83,7 @@ if st.button("Generate Chart") and user_input:
                     "buffer": float(parts["Liq. Drop %"]),
                 })
             except Exception as e:
-                st.warning(f"Failed to parse line: {line} — {e}")
+                st.warning(f"Failed to parse zone line: {line} — {e}")
 
     def get_heiken_ashi():
         try:
@@ -127,7 +135,6 @@ if st.button("Generate Chart") and user_input:
             ax.plot([ha.index[i], ha.index[i]], [ha["HA_Open"].iloc[i], ha["HA_Close"].iloc[i]],
                     color=color, linewidth=5)
 
-    # Guarded y-axis limits
     all_prices = [b["min"] for b in bands] + [b["max"] for b in bands]
     if all_prices:
         ymin = min(all_prices) * 0.99
