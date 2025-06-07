@@ -51,19 +51,19 @@ st.sidebar.markdown(f"**Current ETH Price:** ${eth_price}")
 st.title("Banding LP Strategy Visualizer")
 raw_input = st.text_area("Paste Band Chart Setups Text", height=300)
 
-# Parse text input
 bands = []
-liquidation_levels = []
+liq_lines = []
+
 if raw_input:
     for line in raw_input.splitlines():
-        parts = [p.strip() for p in line.split('|')]
+        parts = [p.strip() for p in line.split('|') if '=' in p]
         try:
-            if line.lower().startswith("band"):
+            if line.lower().startswith("band") and len(parts) >= 5:
                 band_id = parts[0].split()[1]
-                band_min = float(parts[1].split('=')[-1].strip())
-                band_max = float(parts[2].split('=')[-1].strip())
-                liq_price = float(parts[4].split('=')[-1].strip())
-                liq_drop = float(parts[5].split('=')[-1].replace('%', '').strip())
+                band_min = float(parts[1].split('=')[1].strip())
+                band_max = float(parts[2].split('=')[1].strip())
+                liq_price = float(parts[3].split('=')[1].strip())
+                liq_drop = float(parts[4].split('=')[1].replace('%', '').strip())
                 bands.append({
                     "Band": f"Band {band_id}",
                     "Min": band_min,
@@ -71,14 +71,13 @@ if raw_input:
                     "Liq Price": liq_price,
                     "Liq Drop %": liq_drop
                 })
-            elif "Down" in line and "Liq. Price" in line:
+            elif "% Down" in line:
                 label = parts[0].split('=')[0].strip()
-                level = float(parts[0].split('=')[-1].strip())
-                liquidation_levels.append((label, level))
+                value = float(parts[0].split('=')[1].strip())
+                liq_lines.append((label, value))
         except Exception as e:
-            st.warning(f"Could not parse: {line} — {e}")
+            st.warning(f"Failed to parse line: {line} — {e}")
 
-# Plot chart
 if bands:
     df_bands = pd.DataFrame(bands)
     df_ohlc = get_eth_ohlc()
@@ -86,7 +85,6 @@ if bands:
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Plot Heikin Ashi candles
     for i in range(len(ha)):
         color = 'green' if ha.iloc[i]['close'] >= ha.iloc[i]['open'] else 'red'
         ax.plot([ha.index[i], ha.index[i]], [ha.iloc[i]['low'], ha.iloc[i]['high']], color=color, linewidth=1)
@@ -95,8 +93,8 @@ if bands:
                                    height=abs(ha.iloc[i]['close'] - ha.iloc[i]['open']),
                                    color=color, alpha=0.6))
 
-    # Plot bands
     ax.axhline(eth_price, color='gray', linestyle='--', label=f"ETH Spot = ${eth_price:.2f}")
+
     for _, row in df_bands.iterrows():
         ax.axhline(row['Liq Price'], color='red', linestyle=':', linewidth=1)
         ax.fill_betweenx([row['Min'], row['Max']], ha.index[0], ha.index[-1], color='green', alpha=0.3)
@@ -104,6 +102,17 @@ if bands:
                 f"{row['Band']}\n${row['Min']} - ${row['Max']}\nLiq: ${row['Liq Price']} ({row['Liq Drop %']}%)",
                 va='center', fontsize=8)
 
-    # Add liquidation lines
-    for label, price in liquidation_levels:
-        ax.axhline(
+    for label, price in liq_lines:
+        ax.axhline(price, color='crimson', linestyle='--', linewidth=1.2)
+        ax.text(ha.index[0], price, label, va='center', ha='left', fontsize=8, color='crimson')
+
+    min_y = min(df_bands['Min'].min(), ha['low'].min()) * 0.99
+    max_y = max(df_bands['Max'].max(), ha['high'].max()) * 1.01
+    ax.set_ylim(min_y, max_y)
+    ax.set_xlim(ha.index[0], ha.index[-1])
+    ax.set_title("Liquidity Bands and Liquidation Zones")
+    ax.set_ylabel("ETH Price")
+    ax.legend()
+    st.pyplot(fig)
+else:
+    st.info("Paste your Band Chart Setups to visualize the ranges.")
