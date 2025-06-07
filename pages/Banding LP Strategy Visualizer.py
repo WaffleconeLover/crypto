@@ -99,10 +99,10 @@ if bands:
                 f"{row['Band']}\n${row['Min']} - ${row['Max']}\nLiq: ${row['Liq Price']} ({row['Liq Drop %']}%)",
                 va='center', fontsize=8)
 
-    # Set Y-axis range to 1% above max and 1% below min from band range
-    min_price = df_bands['Min'].min()
-    max_price = df_bands['Max'].max()
-    ax.set_ylim(min_price * 0.99, max_price * 1.01)
+    # Set Y-axis to 1% buffer around min/max of both candles and band ranges
+    combined_min = min(df_bands['Min'].min(), ha['low'].min())
+    combined_max = max(df_bands['Max'].max(), ha['high'].max())
+    ax.set_ylim(combined_min * 0.99, combined_max * 1.01)
 
     ax.set_xlim(ha.index[0], ha.index[-1])
     ax.set_title("Liquidity Bands and Liquidation Zones")
