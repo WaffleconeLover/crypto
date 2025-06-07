@@ -23,10 +23,14 @@ if st.button("Refresh ETH Price"):
     else:
         st.error("Failed to retrieve ETH price data from CoinGecko.")
 
+fallback_price = 2500  # or your most recent known ETH price
+
 if eth_price:
     st.markdown(f"**Current ETH Price:** ${eth_price}")
 else:
-    st.markdown("**Current ETH Price:** _Not Available_")
+    st.markdown(f"**Current ETH Price:** _Not Available — using fallback (${fallback_price})_")
+    eth_price = fallback_price
+)
 
 user_input = st.text_area("Paste Band Data Here:")
 
