@@ -75,6 +75,10 @@ if st.button("Submit Band Info") and band_input:
     try:
         # -- Parse Band --
         parts = {}
+        band_label = "Band"  # fallback
+        if "|" in band_line and "=" in band_line:
+            band_label = band_line.split("|")[0].strip()
+
         for kv in band_line.split("|"):
             if "=" in kv:
                 key, val = kv.split("=")
@@ -85,7 +89,7 @@ if st.button("Submit Band Info") and band_input:
         band_min = parts["Min"]
         band_max = parts["Max"]
 
-        # -- Parse Drawdowns using "X Down = Y" only --
+        # -- Parse Drawdowns from "X Down = Y" format --
         dd_levels = []
         for line in dd_lines:
             for kv in line.split("|"):
@@ -113,18 +117,18 @@ if st.button("Submit Band Info") and band_input:
             type='candle',
             style='charles',
             ylabel="Price",
-            title="Band 1 Range (Heikin-Ashi)",
+            title=f"{band_label} Range (Heikin-Ashi)",
             addplot=ap_lines,
             figsize=(10, 5),
             returnfig=True
         )
         st.pyplot(fig_mpf)
 
-        # -- Drawdowns using actual "X Down = Y" values --
+        # -- Drawdowns using actual pasted values --
         fig, ax2 = plt.subplots(figsize=(10, 3))
         for label, price in dd_levels:
             ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
-        ax2.set_title("Band 1 Drawdowns")
+        ax2.set_title(f"{band_label} Drawdowns")
         ax2.set_ylabel("Price")
         ax2.legend()
         st.pyplot(fig)
