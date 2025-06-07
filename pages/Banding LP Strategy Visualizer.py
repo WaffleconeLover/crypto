@@ -12,7 +12,6 @@ st.title("ETH Liquidity Band Dashboard")
 DEXSCREENER_API = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
 COINGECKO_API = "https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days=1"
 
-# -- Fetch ETH price from Dexscreener --
 @st.cache_data(ttl=60)
 def fetch_eth_spot():
     try:
@@ -23,9 +22,8 @@ def fetch_eth_spot():
     except:
         return None
 
-# -- Fetch OHLC data from CoinGecko for candles --
 @st.cache_data(ttl=300)
-def fetch_eth_candles(dummy_cache_buster=None):  # for chart updates on refresh
+def fetch_eth_candles():
     try:
         r = requests.get(COINGECKO_API)
         r.raise_for_status()
@@ -36,7 +34,6 @@ def fetch_eth_candles(dummy_cache_buster=None):  # for chart updates on refresh
     except:
         return None
 
-# -- Convert to Heikin-Ashi candles --
 def compute_heikin_ashi(df):
     ha_df = pd.DataFrame(index=df.index)
     ha_df["close"] = (df["open"] + df["high"] + df["low"] + df["close"]) / 4
@@ -48,14 +45,12 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
-# -- UI --
 st.subheader("1. Refresh ETH Price")
 col1, col2 = st.columns([2, 2])
 
 with col1:
     if st.button("Refresh ETH Price"):
         st.session_state.eth_price = fetch_eth_spot()
-        st.session_state.last_refresh = datetime.now().isoformat()
 
 eth_price = st.session_state.get("eth_price", fetch_eth_spot())
 if eth_price:
@@ -68,14 +63,12 @@ st.subheader("2. Paste Band Data")
 st.caption("Paste band and drawdown data below:")
 band_input = st.text_area("Band Data Input", height=150)
 
-# -- Chart rendering function --
 def render_charts(input_text):
     lines = input_text.strip().split("\n")
     band_line = lines[0]
     dd_lines = lines[1:]
 
     try:
-        # -- Parse Band --
         parts = {}
         band_label = band_line.split("|")[0].strip() if "|" in band_line else "Band"
 
@@ -88,8 +81,8 @@ def render_charts(input_text):
 
         band_min = parts["Min"]
         band_max = parts["Max"]
+        band_mid = (band_min + band_max) / 2
 
-        # -- Parse Drawdowns --
         dd_levels = []
         for line in dd_lines:
             for kv in line.split("|"):
@@ -98,15 +91,9 @@ def render_charts(input_text):
                     dd_levels.append((label.strip(), float(val.strip())))
                     break
 
-        # -- Show inline band metadata (in red) above chart --
-        st.markdown(f"<div style='text-align:center; color:red; font-weight:bold;'>{band_line}</div>", unsafe_allow_html=True)
-
-        # -- Get data and convert to HA candles --
-        df = fetch_eth_candles(st.session_state.get("last_refresh"))
+        df = fetch_eth_candles()
         df.set_index("timestamp", inplace=True)
         ha_df = compute_heikin_ashi(df)
-
-        # -- Plot main chart --
         ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
         ha_plot_df.index.name = "Date"
 
@@ -115,7 +102,7 @@ def render_charts(input_text):
             mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
         ]
 
-        fig_mpf, _ = mpf.plot(
+        fig_mpf, ax_mpf = mpf.plot(
             ha_plot_df,
             type='candle',
             style='charles',
@@ -125,9 +112,22 @@ def render_charts(input_text):
             figsize=(10, 5),
             returnfig=True
         )
+
+        # -- Overlay band line text in red --
+        ax_mpf[0].text(
+            0.5,
+            band_mid,
+            band_line.strip(),
+            transform=ax_mpf[0].get_yaxis_transform(),
+            ha="center",
+            va="center",
+            color="red",
+            fontsize=10,
+            bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
+        )
+
         st.pyplot(fig_mpf)
 
-        # -- Drawdowns chart --
         fig, ax2 = plt.subplots(figsize=(10, 3))
         for label, price in dd_levels:
             ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
@@ -139,10 +139,8 @@ def render_charts(input_text):
     except Exception as e:
         st.error(f"Failed to parse data or generate chart: {e}")
 
-# -- On submit: store band input
 if st.button("Submit Band Info") and band_input:
     st.session_state.band_input = band_input.strip()
 
-# -- Redraw charts if band_input is stored
 if "band_input" in st.session_state:
     render_charts(st.session_state["band_input"])
