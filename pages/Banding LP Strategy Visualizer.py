@@ -38,7 +38,7 @@ else:
     eth_price = fallback_price
 
 # ----------------------------
-# Parse Band and Zone Input
+# Band Input
 # ----------------------------
 band_text = st.text_area("Paste Band Data Here:")
 
@@ -47,6 +47,9 @@ def parse_band_lines(lines):
     zones = []
     for line in lines:
         line = line.strip()
+        if not line or "=" not in line:
+            continue
+
         if line.startswith("Band"):
             band_data = {}
             try:
@@ -57,26 +60,30 @@ def parse_band_lines(lines):
                     band_data[key] = float(value) if "Drop" in key or "Spread" in key else int(value)
                 bands.append(band_data)
             except Exception as e:
-                st.error(f"Failed to parse line: {line} — {e}")
+                st.warning(f"Failed to parse band line: {line} — {e}")
+
         elif "Down" in line:
             try:
                 zone = {}
-                label = line.split("=")[0].strip()
-                zone["label"] = label
+                first_eq = line.split("=", 1)
+                zone["label"] = first_eq[0].strip()
+                zone["level"] = float(first_eq[1].split("|")[0].strip())
+
                 parts = line.split("|")
                 for part in parts:
                     if "=" in part:
                         k, v = part.strip().split(" = ")
                         k = k.strip()
                         v = v.strip().replace('%', '')
-                        zone[k] = float(v)
+                        if "Drop" in k:
+                            zone["Liq. Drop %"] = float(v)
                 zones.append(zone)
             except Exception as e:
-                st.error(f"Failed to parse line: {line} — {e}")
+                st.warning(f"Failed to parse zone line: {line} — {e}")
     return bands, zones
 
 # ----------------------------
-# Generate Heiken Ashi Candles
+# Heiken Ashi Candles
 # ----------------------------
 def get_heiken_ashi():
     try:
@@ -102,7 +109,7 @@ def get_heiken_ashi():
         return pd.DataFrame()
 
 # ----------------------------
-# Render Chart
+# Chart Generator
 # ----------------------------
 if st.button("Generate Chart") and band_text:
     lines = band_text.strip().split("\n")
@@ -110,9 +117,8 @@ if st.button("Generate Chart") and band_text:
     ha = get_heiken_ashi()
 
     fig, ax = plt.subplots(figsize=(14, 6))
-
-    # Plot bands
     all_prices = []
+
     for band in bands:
         ax.axhspan(band["Min"], band["Max"], color="green", alpha=0.3)
         ax.axhline(band["Liq. Price"], linestyle="--", color="red")
@@ -123,23 +129,21 @@ if st.button("Generate Chart") and band_text:
                 fontsize=9, va="center", ha="right")
         all_prices.extend([band["Min"], band["Max"], band["Liq. Price"]])
 
-    # Plot zones
     for zone in zones:
-        ax.axhline(zone["level"], linestyle="dotted", color="crimson")
-        ax.text(ha.index[-1] if not ha.empty else datetime.utcnow(), zone["level"],
-                f"{zone['label']} | Buffer = {zone['Liq. Drop %']:.1%}",
-                fontsize=8, va="bottom", ha="right")
-        all_prices.append(zone["level"])
+        if "level" in zone:
+            ax.axhline(zone["level"], linestyle="dotted", color="crimson")
+            label_time = ha.index[-1] if not ha.empty else datetime.utcnow()
+            ax.text(label_time, zone["level"],
+                    f"{zone['label']} | Buffer = {zone['Liq. Drop %']:.1%}",
+                    fontsize=8, va="bottom", ha="right")
+            all_prices.append(zone["level"])
 
-    # Plot candles if data available
     if not ha.empty:
         for i in range(len(ha)):
             color = "green" if ha["HA_Close"].iloc[i] > ha["HA_Open"].iloc[i] else "red"
             ax.plot([ha.index[i], ha.index[i]], [ha["HA_Low"].iloc[i], ha["HA_High"].iloc[i]], color=color)
-            ax.plot([ha.index[i], ha.index[i]], [ha["HA_Open"].iloc[i], ha["HA_Close"].iloc[i]],
-                    color=color, linewidth=5)
+            ax.plot([ha.index[i], ha.index[i]], [ha["HA_Open"].iloc[i], ha["HA_Close"].iloc[i]], color=color, linewidth=5)
 
-    # Y-Axis limits
     if all_prices:
         ymin = min(all_prices) * 0.99
         ymax = max(all_prices) * 1.01
