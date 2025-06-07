@@ -58,14 +58,14 @@ liq_lines = []
 if run_button and raw_input:
     for line in raw_input.splitlines():
         line = line.strip()
-        parts = [p.strip() for p in line.split('|') if '=' in p]
+        parts = [p.strip() for p in line.split('|') if '=' in p and not p.lower().startswith('spread')]
         try:
             if line.lower().startswith("band"):
                 band_id = parts[0].split()[1]
                 band_min = float(parts[1].split('=')[1].strip())
                 band_max = float(parts[2].split('=')[1].strip())
-                liq_price = float(parts[4].split('=')[1].strip())
-                liq_drop = float(parts[5].split('=')[1].replace('%', '').strip())
+                liq_price = float(parts[3].split('=')[1].strip())
+                liq_drop = float(parts[4].split('=')[1].replace('%', '').strip())
                 bands.append({
                     "Band": f"Band {band_id}",
                     "Min": band_min,
