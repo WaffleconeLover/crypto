@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import requests
 from datetime import datetime
+import re
 
 @st.cache_data(ttl=300)
 def get_eth_price():
@@ -58,7 +59,8 @@ liq_lines = []
 if run_button and raw_input:
     for line in raw_input.splitlines():
         line = line.strip()
-        parts = [p.strip() for p in line.split('|') if '=' in p and not p.lower().startswith('spread')]
+        line = re.sub(r"\|?\s*Spread\s*=\s*[^|]+", "", line)  # Remove any 'Spread = ...' segments
+        parts = [p.strip() for p in line.split('|') if '=' in p]
         try:
             if line.lower().startswith("band"):
                 band_id = parts[0].split()[1]
