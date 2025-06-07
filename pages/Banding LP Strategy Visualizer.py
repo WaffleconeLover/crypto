@@ -1,105 +1,95 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import yfinance as yf
+from datetime import datetime, timedelta
+import re
 
-# --- Helper functions ---
-def fetch_eth_prices():
-    try:
-        df = yf.download("ETH-USD", period="2d", interval="15m")
-        df.index = pd.to_datetime(df.index)
-        df = df[['Open', 'High', 'Low', 'Close']].rename(columns=str.lower)
-        return df
-    except Exception as e:
-        st.error("Failed to retrieve ETH price data from Yahoo Finance.")
-        return pd.DataFrame()
-
-def heiken_ashi(df):
-    if df.empty:
-        return pd.DataFrame()
-
-    ha_df = df.copy()
-    ha_df['close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-    ha_df['open'] = 0.0
-    ha_df['open'].iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
-    for i in range(1, len(df)):
-        ha_df['open'].iloc[i] = (ha_df['open'].iloc[i-1] + ha_df['close'].iloc[i-1]) / 2
-    ha_df['high'] = ha_df[['open', 'close', 'high']].max(axis=1)
-    ha_df['low'] = ha_df[['open', 'close', 'low']].min(axis=1)
-    return ha_df
-
-def parse_band_block(block_text):
-    lines = block_text.strip().split('\n')
-    bands = []
-    drawdowns = []
-
-    band_data = {}
-    for line in lines:
-        if line.startswith("Band"):
-            try:
-                parts = line.split('|')
-                band_data = {
-                    'label': parts[0].strip(),
-                    'min': float(parts[1].split('=')[1]),
-                    'max': float(parts[2].split('=')[1]),
-                }
-                bands.append(band_data)
-            except Exception as e:
-                st.warning(f"Failed to parse line: {line} -- {e}")
-        elif "% Down" in line:
-            try:
-                parts = line.split('|')
-                drawdowns.append({
-                    'label': parts[0].strip(),
-                    'level': float(parts[0].split('=')[1])
-                })
-            except Exception as e:
-                st.warning(f"Failed to parse drawdown line: {line} -- {e}")
-
-    return bands, drawdowns
-
-def plot_band_and_drawdowns(ha_df, bands, drawdowns):
-    if ha_df.empty or not bands:
-        st.warning("No valid chart data available.")
-        return
-
-    for i, band in enumerate(bands):
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
-
-        # Band Chart
-        ax1.plot(ha_df.index, ha_df['close'], label='ETH Price', color='green')
-        ax1.axhline(band['min'], color='blue', linestyle='dashed', label='Band Min')
-        ax1.axhline(band['max'], color='orange', linestyle='dashed', label='Band Max')
-        ax1.set_title(f"{band['label']} Range Chart")
-        ax1.legend()
-
-        # Drawdown Chart
-        ax2.plot(ha_df.index, ha_df['close'], label='ETH Price', color='gray')
-        for d in drawdowns:
-            ax2.axhline(d['level'], linestyle='dashed', label=d['label'])
-        ax2.set_title(f"{band['label']} Drawdowns Chart")
-        ax2.legend()
-
-        st.pyplot(fig)
-
-# --- Streamlit Interface ---
+st.set_page_config(layout="wide")
 st.title("Banding LP Chart Builder")
 
-if "eth_price" not in st.session_state:
-    st.session_state.eth_price = fetch_eth_prices()
+# Sample data generation function for ETH prices (for simulation purposes)
+def get_eth_price_data():
+    now = datetime.now()
+    times = pd.date_range(end=now, periods=100, freq='H')
+    prices = np.linspace(2518, 2543, len(times)) + np.random.normal(0, 5, len(times))
+    return pd.DataFrame({'datetime': times, 'close': prices})
 
-if st.button("Refresh ETH Price"):
-    st.session_state.eth_price = fetch_eth_prices()
+# Function to convert standard OHLC to Heiken Ashi
+def heiken_ashi(df):
+    ha_df = df.copy()
+    ha_df['close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+    ha_df['open'] = (df['open'].shift(1) + df['close'].shift(1)) / 2
+    ha_df['high'] = df[['high', 'open', 'close']].max(axis=1)
+    ha_df['low'] = df[['low', 'open', 'close']].min(axis=1)
+    ha_df.iloc[0, ha_df.columns.get_loc('open')] = (df.iloc[0]['open'] + df.iloc[0]['close']) / 2
+    return ha_df
 
-eth_df = st.session_state.eth_price
+# Parse band input
+band_input = st.text_area("Paste Band 1 Block Here:", height=160)
+submit = st.button("Generate Chart")
+refresh_price = st.button("Refresh ETH Price")
+
+eth_df = get_eth_price_data()
+
 if not eth_df.empty:
     st.write("Current ETH Price:", f"${eth_df['close'].iloc[-1]:.2f}")
 else:
-    st.write("Current ETH Price:", "*Not Available*")
+    st.write("Current ETH Price: Not Available")
 
-block_text = st.text_area("Paste Band 1 Block", height=180)
-if st.button("Generate Chart"):
-    bands, drawdowns = parse_band_block(block_text)
-    ha_df = heiken_ashi(eth_df)
-    plot_band_and_drawdowns(ha_df, bands, drawdowns)
+if submit:
+    lines = band_input.strip().splitlines()
+    bands = []
+    drawdowns = []
+
+    for line in lines:
+        line = line.strip()
+        if line.startswith("Band"):
+            try:
+                pattern = r"Min = (\d+) \| Max = (\d+) \| Spread = ([\d.]+)% \| Liq. Price = (\d+) \| Liq. Drop % = ([\d.]+)"
+                match = re.search(pattern, line)
+                if match:
+                    min_val, max_val, spread, liq_price, drop_pct = match.groups()
+                    bands.append({
+                        'min': int(min_val),
+                        'max': int(max_val),
+                        'spread': float(spread),
+                        'liq_price': int(liq_price),
+                        'liq_drop': float(drop_pct)
+                    })
+            except Exception as e:
+                st.warning(f"Failed to parse line: {line} ({e})")
+        elif "Down" in line:
+            try:
+                level_match = re.match(r"(\d+)% Down = (\d+)", line)
+                if level_match:
+                    pct, level = level_match.groups()
+                    drawdowns.append({'label': f"{pct}% Down", 'level': int(level)})
+            except Exception as e:
+                st.warning(f"Failed to parse line: {line} ({e})")
+
+    if not bands:
+        st.warning("No valid band data found.")
+    else:
+        # Prepare ETH OHLC data
+        eth_df['open'] = eth_df['close'].shift(1).fillna(method='bfill')
+        eth_df['high'] = eth_df[['open', 'close']].max(axis=1) + np.random.normal(0, 1, len(eth_df))
+        eth_df['low'] = eth_df[['open', 'close']].min(axis=1) - np.random.normal(0, 1, len(eth_df))
+        ha_df = heiken_ashi(eth_df)
+
+        # Plot Range Chart
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+        ax1.set_title("Band 1 Range Chart")
+        ax1.plot(ha_df['datetime'], ha_df['close'], label='ETH Price', color='green')
+        ax1.axhline(bands[0]['min'], color='blue', linestyle='--', label='Band Min')
+        ax1.axhline(bands[0]['max'], color='orange', linestyle='--', label='Band Max')
+        ax1.legend()
+
+        # Plot Drawdowns
+        ax2.set_title("Band 1 Drawdowns Chart")
+        ax2.plot(ha_df['datetime'], ha_df['close'], label='ETH Price', color='black')
+        for zone in drawdowns:
+            ax2.axhline(zone['level'], linestyle='--', label=zone['label'], color='skyblue')
+        ax2.legend()
+
+        st.pyplot(fig)
