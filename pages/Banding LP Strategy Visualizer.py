@@ -1,126 +1,93 @@
 import streamlit as st
-import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from datetime import datetime, timedelta
+import pandas as pd
+import numpy as np
 import requests
-from matplotlib.ticker import FuncFormatter
+from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
-st.title("Banding LP Chart Builder")
 
-# ETH price fetch button
+st.title("Band 1 Range Chart and Drawdowns")
+
+# ETH price button
 if st.button("Refresh ETH Price"):
     try:
-        response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
-        eth_price = response.json()["ethereum"]["usd"]
-        st.session_state["eth_price"] = eth_price
-    except Exception:
-        st.error("Failed to retrieve ETH price data from CoinGecko.")
+        eth_price = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd").json()["ethereum"]["usd"]
+        st.session_state.eth_price = eth_price
+    except:
+        st.session_state.eth_price = "Error fetching"
+if "eth_price" in st.session_state:
+    st.write(f"Current ETH Price: ${st.session_state.eth_price}")
 
-# Display current ETH price
-eth_price = st.session_state.get("eth_price", "Not Available")
-st.markdown(f"**Current ETH Price:** {eth_price if isinstance(eth_price, str) else f'${eth_price:.2f}'}")
+# Text input for Band 1
+user_input = st.text_area("Paste Band 1 block", height=200)
 
-input_text = st.text_area("Paste Band Data Here:", height=200)
+if user_input:
+    # Clean whitespace
+    lines = [line.strip() for line in user_input.strip().split("\n") if line.strip()]
+    
+    # Parse values
+    try:
+        min_val = int(lines[0].split("Min = ")[1].split(" |")[0])
+        max_val = int(lines[0].split("Max = ")[1].split(" |")[0])
+        liq_price = int(lines[0].split("Liq. Price = ")[1].split(" |")[0])
 
-if st.button("Generate Chart"):
-    lines = input_text.strip().split("\n")
+        dd_prices = []
+        dd_labels = []
+        for line in lines[1:]:
+            pct_label = line.split("= ")[0]
+            price = int(line.split("= ")[1].split(" |")[0])
+            dd_prices.append(price)
+            dd_labels.append(pct_label)
 
-    bands = []
-    zones = []
-    current_band = {}
+        # Generate time series
+        now = datetime.now()
+        times = [now - timedelta(minutes=15 * i) for i in range(50)][::-1]
+        prices = np.linspace(min_val, max_val, len(times))
 
-    for line in lines:
-        line = line.strip()
-        try:
-            if line.startswith("Band"):
-                if current_band:
-                    bands.append(current_band)
-                    current_band = {}
-                parts = line.split("|")
-                current_band = {
-                    "label": parts[0].strip(),
-                    "min": float(parts[1].split("=")[1].strip()),
-                    "max": float(parts[2].split("=")[1].strip()),
-                    "spread": parts[3].split("=")[1].strip(),
-                    "liq_price": float(parts[4].split("=")[1].strip()),
-                    "liq_drop_pct": float(parts[5].split("=")[1].strip())
-                }
-            elif "% Down" in line:
-                parts = line.split("|")
-                zones.append({
-                    "band": current_band.get("label", "Unknown"),
-                    "level": float(parts[0].split("=")[1].strip()),
-                    "liq_price": float(parts[1].split("=")[1].strip()),
-                    "distance": float(parts[2].split("=")[1].strip()),
-                    "buffer": float(parts[3].split("=")[1].strip())
-                })
-        except Exception as e:
-            st.warning(f"Failed to parse line: {line} — {e}")
+        # Heikin Ashi conversion
+        df = pd.DataFrame({"Time": times, "Close": prices})
+        df["Open"] = df["Close"].shift(1).fillna(df["Close"][0])
+        df["High"] = df[["Open", "Close"]].max(axis=1)
+        df["Low"] = df[["Open", "Close"]].min(axis=1)
 
-    if current_band:
-        bands.append(current_band)
+        df["HA_Close"] = (df["Open"] + df["High"] + df["Low"] + df["Close"]) / 4
+        ha_open = [(df["Open"][0] + df["Close"][0]) / 2]
+        for i in range(1, len(df)):
+            ha_open.append((ha_open[i - 1] + df["HA_Close"][i - 1]) / 2)
+        df["HA_Open"] = ha_open
+        df["HA_High"] = df[["HA_Open", "HA_Close", "High"]].max(axis=1)
+        df["HA_Low"] = df[["HA_Open", "HA_Close", "Low"]].min(axis=1)
 
-    if not bands:
-        st.warning("No valid band data found.")
-    else:
-        # Mock 15-min Heiken Ashi candles
-        def generate_mock_candles():
-            now = datetime.now()
-            times = [now - timedelta(minutes=15 * i) for i in range(96)][::-1]
-            base = eth_price if isinstance(eth_price, (int, float)) else 2500
-            data = []
-            price = base
-            for t in times:
-                open_ = price + (1 - 2 * (t.minute % 2)) * 5
-                close = open_ + (1 - 2 * (t.minute % 3)) * 5
-                high = max(open_, close) + 2
-                low = min(open_, close) - 2
-                data.append((t, open_, high, low, close))
-                price = close
-            return pd.DataFrame(data, columns=["time", "open", "high", "low", "close"])
+        # Chart 1: Band range
+        fig, ax = plt.subplots(figsize=(10, 4))
+        for i in range(len(df)):
+            color = "green" if df["HA_Close"][i] > df["HA_Open"][i] else "red"
+            ax.plot([df["Time"][i], df["Time"][i]], [df["HA_Low"][i], df["HA_High"][i]], color=color)
+            ax.add_patch(plt.Rectangle((mdates.date2num(df["Time"][i]) - 0.005, min(df["HA_Open"][i], df["HA_Close"][i])),
+                                       0.01, abs(df["HA_Close"][i] - df["HA_Open"][i]), color=color))
 
-        ha_df = generate_mock_candles()
+        ax.axhline(min_val, color="blue", linestyle="--", label="Band Min")
+        ax.axhline(max_val, color="orange", linestyle="--", label="Band Max")
+        ax.set_ylim(min_val * 0.99, max_val * 1.01)
+        ax.set_title("Band 1 Range Chart")
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax.legend()
+        st.pyplot(fig)
 
-        for band in bands:
-            ymin = band["min"] * 0.99
-            ymax = band["max"] * 1.01
+        # Chart 2: Drawdowns
+        fig2, ax2 = plt.subplots(figsize=(10, 4))
+        ax2.plot(df["Time"], df["Close"], label="ETH Price", color="black")
 
-            fig, ax = plt.subplots(figsize=(12, 5))
-            ax.set_title(f"{band['label']} Range Chart")
-            ax.set_ylabel("ETH Price")
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H'))
-            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        for label, price in zip(dd_labels, dd_prices):
+            ax2.axhline(price, linestyle="--", label=label)
 
-            # Candles
-            for i in range(len(ha_df)):
-                row = ha_df.iloc[i]
-                color = "green" if row.close >= row.open else "red"
-                ax.plot([row.time, row.time], [row.low, row.high], color=color)
-                ax.plot([row.time, row.time], [row.open, row.close], color=color, linewidth=5)
+        ax2.set_ylim(min(dd_prices) * 0.99, max(dd_prices) * 1.01)
+        ax2.set_title("Band 1 Drawdowns Chart")
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax2.legend()
+        st.pyplot(fig2)
 
-            # Range
-            ax.axhspan(band["min"], band["max"], color="green", alpha=0.2)
-            ax.axhline(band["liq_price"], color="crimson", linestyle="dashed")
-            ax.text(ha_df.index[-1], band["liq_price"], f"Liq: ${band['liq_price']} ({band['liq_drop_pct'] * 100:.1f}%)", 
-                    va="bottom", ha="right", fontsize=9)
-            ax.text(ha_df.index[-1], (band["min"] + band["max"]) / 2, f"{band['label']}\n{int(band['min'])} - {int(band['max'])}", 
-                    va="top", ha="right", fontsize=9)
-
-            st.pyplot(fig)
-
-            # Drawdown chart
-            fig2, ax2 = plt.subplots(figsize=(12, 3))
-            ax2.set_title(f"{band['label']} Drawdowns Chart")
-            ax2.set_ylabel("ETH Price")
-            ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H'))
-            ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
-
-            for zone in zones:
-                if zone['band'] == band['label']:
-                    ax2.axhline(zone["level"], linestyle="dotted", color="crimson")
-                    ax2.text(ha_df.index[-1], zone["level"], f"{int(zone['level'])} | {zone['buffer']*100:.0f}%", 
-                             va="bottom", ha="right", fontsize=8)
-
-            st.pyplot(fig2)
+    except Exception as e:
+        st.error(f"Failed to parse input: {e}")
