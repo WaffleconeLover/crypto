@@ -85,18 +85,16 @@ if st.button("Submit Band Info") and band_input:
         band_min = parts["Min"]
         band_max = parts["Max"]
 
-        # -- Parse Drawdowns --
+        # -- Parse Drawdowns (fixed parsing to use correct price for each label) --
         dd_levels = []
         for line in dd_lines:
-            dd_parts = {}
-            for kv in line.split("|"):
-                if "=" in kv:
-                    key, val = kv.split("=")
-                    key = key.strip()
-                    val = val.strip().replace("%", "")
-                    dd_parts[key] = float(val)
-            label = line.split("=")[0].strip()
-            dd_levels.append((label, dd_parts["Liq. Price"]))
+            tokens = [kv.strip() for kv in line.split("|") if "=" in kv]
+            label = line.split("|")[0].split("=")[0].strip()
+            for token in tokens:
+                k, v = token.split("=")
+                if "Liq. Price" in k:
+                    dd_levels.append((label, float(v.strip().replace("%", ""))))
+                    break
 
         # -- Get data and convert to HA candles --
         df = fetch_eth_candles()
