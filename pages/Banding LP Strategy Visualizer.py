@@ -1,164 +1,177 @@
 import streamlit as st
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import pandas as pd
+import numpy as np
 import requests
 from datetime import datetime, timedelta
-import mplfinance as mpf
-import numpy as np
+from matplotlib.ticker import FuncFormatter
+from mplfinance.original_flavor import candlestick_ohlc
 
 st.set_page_config(layout="wide")
 st.title("Banding LP Chart Builder")
 
 # --------------------
-# Helper: CoinGecko ETH price
+# ETH Price Fetcher
 # --------------------
 def get_eth_price():
-    url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
     try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.json()['ethereum']['usd']
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
+        return r.json()['ethereum']['usd']
     except:
         return None
 
+eth_price = get_eth_price()
+if eth_price:
+    st.markdown(f"**Current ETH Price:** ${eth_price:,.2f}")
+else:
+    st.markdown("**Current ETH Price:** *Not Available*")
+    st.error("Failed to retrieve ETH price data from CoinGecko.")
+
 # --------------------
-# Helper: Heiken Ashi candles
+# Chart Data Input
+# --------------------
+st.markdown("**Paste Band Data Here:**")
+user_input = st.text_area("", height=200)
+
+# --------------------
+# Parse Band and Zone Data
+# --------------------
+def parse_input(text):
+    bands = []
+    zones = []
+    current_band = None
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        try:
+            if line.startswith("Band"):
+                parts = [p.strip() for p in line.split("|")]
+                band = {}
+                for part in parts:
+                    if part.startswith("Band"):
+                        band_num = int(part.split(" ")[1])
+                        band["Band"] = band_num
+                    else:
+                        key, value = [p.strip() for p in part.split("=")]
+                        if key == "Spread":
+                            band[key] = float(value.replace("%", "")) / 100
+                        elif key in ["Min", "Max", "Liq. Price"]:
+                            band[key] = float(value)
+                        elif key == "Liq. Drop %":
+                            band[key] = float(value)
+                bands.append(band)
+                current_band = band_num
+
+            elif line.startswith("5%") or line.startswith("10%") or line.startswith("15%"):
+                parts = [p.strip() for p in line.split("|")]
+                zone = {"Band": current_band}
+                for part in parts:
+                    key, value = [p.strip() for p in part.split("=")]
+                    if key in ["5% Down", "10% Down", "15% Down"]:
+                        zone["label"] = key
+                        zone["level"] = float(value)
+                    elif key == "Liq. Drop %":
+                        zone[key] = float(value)
+                    elif key in ["Liq. Price", "Dist. from Liq. Price"]:
+                        zone[key] = float(value)
+                zones.append(zone)
+        except Exception as e:
+            st.warning(f"Failed to parse line: {line} — {e}")
+
+    return bands, zones
+
+# --------------------
+# Chart Generator
 # --------------------
 def get_heiken_ashi():
-    end_time = datetime.utcnow()
-    start_time = end_time - timedelta(hours=48)
-
+    end = datetime.now()
+    start = end - timedelta(days=2)
     url = (
-        f"https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=2"
+        f"https://api.coingecko.com/api/v3/coins/ethereum/market_chart/range"
+        f"?vs_currency=usd&from={int(start.timestamp())}&to={int(end.timestamp())}"
     )
-    r = requests.get(url)
-    data = r.json()
-
-    prices = data['prices']
-    df = pd.DataFrame(prices, columns=['timestamp', 'price'])
+    r = requests.get(url).json()
+    prices = r['prices']
+    df = pd.DataFrame(prices, columns=["timestamp", "price"])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
     df.set_index('timestamp', inplace=True)
-    df = df.resample('15T').ohlc()['price']
+    df['open'] = df['price'].shift(1)
+    df['high'] = df[['open', 'price']].max(axis=1)
+    df['low'] = df[['open', 'price']].min(axis=1)
+    df['close'] = df['price']
+    df = df.dropna()
 
-    ha_df = pd.DataFrame(index=df.index, columns=['Open', 'High', 'Low', 'Close'])
-    for i in range(len(df)):
-        o = df['open'].iloc[i]
-        h = df['high'].iloc[i]
-        l = df['low'].iloc[i]
-        c = df['close'].iloc[i]
-        if i == 0:
-            ha_open = o
-        else:
-            ha_open = (ha_df['Open'].iloc[i - 1] + ha_df['Close'].iloc[i - 1]) / 2
-        ha_close = (o + h + l + c) / 4
-        ha_high = max(h, ha_open, ha_close)
-        ha_low = min(l, ha_open, ha_close)
-        ha_df.iloc[i] = [ha_open, ha_high, ha_low, ha_close]
+    o = df['open']
+    h = df['high']
+    l = df['low']
+    c = df['close']
+    ha_open = (o + c) / 2
+    ha_close = (o + h + l + c) / 4
+    ha_high = df[['high', 'open', 'close']].max(axis=1)
+    ha_low = df[['low', 'open', 'close']].min(axis=1)
 
-    return ha_df.dropna()
-
-# --------------------
-# Helper: Parse input
-# --------------------
-def parse_band_blocks(text):
-    bands = []
-    blocks = text.strip().split("\n\n")
-    for block in blocks:
-        lines = block.strip().split("\n")
-        if not lines:
-            continue
-        try:
-            band_line = lines[0].strip()
-            band = {}
-            parts = band_line.split("|")
-            for part in parts:
-                k, v = part.strip().split("=", 1)
-                band[k.strip()] = v.strip()
-
-            band_data = {
-                'label': band_line,
-                'min': float(band['Min']),
-                'max': float(band['Max']),
-                'liq_price': float(band['Liq. Price']),
-                'liq_drop_pct': float(band['Liq. Drop %'])
-            }
-
-            drawdowns = []
-            for dd_line in lines[1:]:
-                if 'Down' not in dd_line:
-                    continue
-                try:
-                    zone = {}
-                    parts = dd_line.split("|")
-                    for part in parts:
-                        k, v = part.strip().split("=", 1)
-                        zone[k.strip()] = v.strip()
-                    drawdowns.append({
-                        'label': dd_line.strip(),
-                        'level': float(zone['5% Down' if '5% Down' in zone else '10% Down' if '10% Down' in zone else '15% Down'] if '5% Down' in zone or '10% Down' in zone or '15% Down' in zone else zone['Liq. Price'])
-                    })
-                except:
-                    continue
-
-            band_data['drawdowns'] = drawdowns
-            bands.append(band_data)
-
-        except Exception as e:
-            st.warning(f"Failed to parse line: {band_line} — {e}")
-    return bands
-
-# --------------------
-# Main Chart Generator
-# --------------------
-def plot_band_and_drawdowns(band, eth_price, ha):
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 7), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
-
-    # Top chart: Band range and candles
-    ax1.set_title("Band 1 Range Chart")
-    ax1.set_ylabel("ETH Price")
-    ax1.axhspan(band['min'], band['max'], color='green', alpha=0.2)
-    ax1.text(ha.index[-1], band['max'], f"Band\n{band['min']} – {band['max']}\nLiq: ${band['liq_price']} ({float(band['liq_drop_pct'])*100:.1f}%)",
-             va='top', ha='right', fontsize=8)
-
-    mpf.plot(ha, type='candle', ax=ax1, style='charles', ylabel='')
-
-    # Bottom chart: Drawdowns
-    ax2.set_title("Band 1 Drawdowns Chart")
-    ax2.set_ylabel("ETH Price")
-    ax2.set_ylim(
-        min([z['level'] for z in band['drawdowns']]) * 0.99,
-        max([z['level'] for z in band['drawdowns']]) * 1.01,
-    )
-    for zone in band['drawdowns']:
-        ax2.axhline(zone['level'], linestyle="dotted", color="crimson")
-        ax2.text(ha.index[-1], zone['level'], zone['label'], color="crimson", fontsize=8, va='bottom', ha='right')
-
-    return fig
-
-# --------------------
-# UI
-# --------------------
-if 'eth_price' not in st.session_state:
-    st.session_state['eth_price'] = get_eth_price()
-
-if st.button("Refresh ETH Price"):
-    price = get_eth_price()
-    if price:
-        st.session_state['eth_price'] = price
-    else:
-        st.error("Failed to retrieve ETH price data from CoinGecko.")
-
-eth_price = st.session_state['eth_price']
-
-st.markdown(f"**Current ETH Price:** ${eth_price if eth_price else '*Not Available*'}")
-
-user_input = st.text_area("Paste Band Data Here:", height=180)
+    df_ha = pd.DataFrame({
+        'timestamp': df.index,
+        'open': ha_open,
+        'high': ha_high,
+        'low': ha_low,
+        'close': ha_close
+    })
+    df_ha.reset_index(drop=True, inplace=True)
+    df_ha['timestamp'] = mdates.date2num(df_ha['timestamp'])
+    return df_ha
 
 if st.button("Generate Chart"):
-    bands = parse_band_blocks(user_input)
-    if bands:
-        ha = get_heiken_ashi()
-        chart = plot_band_and_drawdowns(bands[0], eth_price, ha)
-        st.pyplot(chart)
-    else:
+    bands, zones = parse_input(user_input)
+
+    if not bands:
         st.warning("No valid band data found.")
+    else:
+        df_ha = get_heiken_ashi()
+
+        for band in bands:
+            band_zones = [z for z in zones if z['Band'] == band['Band']]
+            ymin = min(band['Min'], band['Max']) * 0.99
+            ymax = max(band['Min'], band['Max']) * 1.01
+
+            # Band Chart
+            fig, ax = plt.subplots(figsize=(12, 5))
+            ax.set_title(f"Band {band['Band']} Range Chart")
+            ax.set_ylabel("ETH Price")
+            ax.set_ylim([ymin, ymax])
+
+            ohlc = df_ha[['timestamp', 'open', 'high', 'low', 'close']].values
+            candlestick_ohlc(ax, ohlc, width=0.02, colorup='green', colordown='red')
+
+            ax.axhline(band['Min'], color='green', linestyle='--')
+            ax.axhline(band['Max'], color='green', linestyle='--')
+            ax.fill_between(df_ha['timestamp'], band['Min'], band['Max'], color='green', alpha=0.2)
+
+            ax.text(df_ha['timestamp'].iloc[-1], band['Max'],
+                    f"Band\n{band['Min']} - {band['Max']}\nLiq: ${band['Liq. Price']} ({band['Liq. Drop %']*100:.1f}%)",
+                    ha='right', va='bottom')
+
+            ax.xaxis_date()
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H'))
+            st.pyplot(fig)
+
+            # Drawdown Chart
+            fig2, ax2 = plt.subplots(figsize=(12, 5))
+            ax2.set_title(f"Band {band['Band']} Drawdowns Chart")
+            ax2.set_ylabel("ETH Price")
+            ax2.set_ylim([band['Liq. Price'] * 0.95, max(band['Min'], band['Max']) * 1.02])
+
+            candlestick_ohlc(ax2, ohlc, width=0.02, colorup='green', colordown='red')
+
+            for zone in band_zones:
+                ax2.axhline(zone['level'], linestyle='dotted', color='crimson')
+                ax2.text(df_ha['timestamp'].iloc[-1], zone['level'],
+                        f"{zone['label']} = {zone['level']:.0f}", ha='right', va='bottom', color='crimson')
+
+            ax2.xaxis_date()
+            ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H'))
+            st.pyplot(fig2)
