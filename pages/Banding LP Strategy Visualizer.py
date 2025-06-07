@@ -35,6 +35,18 @@ def fetch_eth_candles():
     except:
         return None
 
+# -- Convert to Heikin-Ashi candles --
+def compute_heikin_ashi(df):
+    ha_df = pd.DataFrame(index=df.index)
+    ha_df["close"] = (df["open"] + df["high"] + df["low"] + df["close"]) / 4
+    ha_open = [(df["open"].iloc[0] + df["close"].iloc[0]) / 2]
+    for i in range(1, len(df)):
+        ha_open.append((ha_open[i - 1] + ha_df["close"].iloc[i - 1]) / 2)
+    ha_df["open"] = ha_open
+    ha_df["high"] = df[["high", "open", "close"]].max(axis=1)
+    ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
+    return ha_df
+
 # -- UI --
 st.subheader("1. Refresh ETH Price")
 col1, col2 = st.columns([2, 2])
@@ -66,7 +78,7 @@ if st.button("Submit Band Info") and band_input:
             if "=" in kv:
                 key, val = kv.split("=")
                 key = key.strip()
-                val = val.strip().replace("%", "")  # FIXED HERE
+                val = val.strip().replace("%", "")
                 parts[key] = float(val)
 
         band_min = parts["Min"]
@@ -80,28 +92,31 @@ if st.button("Submit Band Info") and band_input:
                 if "=" in kv:
                     key, val = kv.split("=")
                     key = key.strip()
-                    val = val.strip().replace("%", "")  # FIXED HERE
+                    val = val.strip().replace("%", "")
                     dd_parts[key] = float(val)
             label = line.split("=")[0].strip()
             dd_levels.append((label, dd_parts["Liq. Price"]))
 
-        # -- Plot Charts --
+        # -- Get data and convert to HA candles --
         df = fetch_eth_candles()
+        df.set_index("timestamp", inplace=True)
+        ha_df = compute_heikin_ashi(df)
 
+        # -- Plot Charts --
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
-        # Chart 1: Candlestick + Range
-        if df is not None:
-            ax1.plot(df["timestamp"], df["close"], label="ETH Price", color="green")
+        # Chart 1: Heikin-Ashi + Band Range
+        ax1.plot(ha_df.index, ha_df["close"], label="ETH Price", color="green")
         ax1.axhline(band_min, color="orange", linestyle="--", label="Min")
-        ax1.axhline(band_max, color="green", linestyle="--", label="Max")
+        ax1.axhline(band_max, color="darkgreen", linestyle="--", label="Max")
         ax1.set_title("Band 1 Range")
         ax1.set_ylabel("Price")
         ax1.legend()
 
-        # Chart 2: Drawdowns
-        for label, price in dd_levels:
-            ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
+        # Chart 2: Drawdowns from ETH spot
+        ax2.axhline(eth_price * 0.95, linestyle="--", label=f"5% Down = {int(eth_price * 0.95)}", color="skyblue")
+        ax2.axhline(eth_price * 0.90, linestyle="--", label=f"10% Down = {int(eth_price * 0.90)}", color="skyblue")
+        ax2.axhline(eth_price * 0.85, linestyle="--", label=f"15% Down = {int(eth_price * 0.85)}", color="skyblue")
         ax2.set_title("Band 1 Drawdowns")
         ax2.set_ylabel("Price")
         ax2.legend()
