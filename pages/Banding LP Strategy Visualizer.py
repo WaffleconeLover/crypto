@@ -1,78 +1,99 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import numpy as np
-import datetime
+import matplotlib.pyplot as plt
 import requests
+from datetime import datetime
 
-# -- Fetch ETH price data for last 48 hours
-@st.cache_data(ttl=300)
+st.set_page_config(layout="wide")
+st.title("Banding LP Chart Builder")
+
+# ========== ETH DATA FETCH ==========
+@st.cache_data(show_spinner=False)
 def fetch_eth_prices():
     url = "https://api.coingecko.com/api/v3/coins/ethereum/market_chart"
-    params = {"vs_currency": "usd", "days": 2, "interval": "hourly"}
+    params = {"vs_currency": "usd", "days": "3", "interval": "hourly"}
     r = requests.get(url, params=params)
     data = r.json()
+    if "prices" not in data:
+        return pd.DataFrame(columns=["timestamp", "price"])
     prices = pd.DataFrame(data["prices"], columns=["timestamp", "price"])
     prices["timestamp"] = pd.to_datetime(prices["timestamp"], unit="ms")
-    prices.set_index("timestamp", inplace=True)
     return prices
 
 eth_df = fetch_eth_prices()
 
-# -- Sidebar and inputs
-st.title("Banding LP Chart Builder")
-st.button("Refresh ETH Price")
+# ========== USER INPUT AREA ==========
+st.subheader("Paste Band 1 Block")
+band_text = st.text_area("", height=200)
 
-st.markdown("**Current ETH Price:** ${:.2f}".format(eth_df["price"].iloc[-1]))
+col1, col2 = st.columns([1, 1])
+with col1:
+    if st.button("Generate Chart"):
+        st.session_state.band_data = band_text
+with col2:
+    if st.button("Refresh ETH Price"):
+        eth_df = fetch_eth_prices()
 
-user_input = st.text_area("Paste Band 1 Block:")
-submit = st.button("Generate Chart")
+if not eth_df.empty:
+    st.write("Current ETH Price:", f"${eth_df['price'].iloc[-1]:,.2f}")
+else:
+    st.write("Current ETH Price: *Not Available*")
 
-if submit:
-    try:
-        lines = [line.strip() for line in user_input.strip().splitlines() if line.strip()]
+# ========== PARSER ==========
+def parse_band_block(text):
+    blocks = []
+    raw = text.strip().splitlines()
+    for i, line in enumerate(raw):
+        if line.startswith("Band"):
+            parts = {kv.split(" = ")[0].strip(): kv.split(" = ")[1].strip() for kv in line.split(" | ") if "=" in kv}
+            blocks.append({
+                "band": parts.get("Band 1", f"Band {i+1}"),
+                "min": float(parts["Min"]),
+                "max": float(parts["Max"]),
+                "liq": float(parts["Liq. Price"]),
+                "drop": float(parts["Liq. Drop %"]),
+            })
+        elif "Down" in line:
+            if not blocks:
+                continue
+            if "drawdowns" not in blocks[-1]:
+                blocks[-1]["drawdowns"] = []
+            p = {kv.split(" = ")[0].strip(): kv.split(" = ")[1].strip() for kv in line.split(" | ") if "=" in kv}
+            blocks[-1]["drawdowns"].append({
+                "level": float(p[list(p.keys())[0]]),
+                "label": list(p.keys())[0]
+            })
+    return blocks
 
-        band_data = {}
-        levels = []
-        for line in lines:
-            if line.startswith("Band"):
-                parts = dict(item.strip().split("=", 1) for item in line.split("|") if "=" in item)
-                band_data = {
-                    "min": float(parts["Min"]),
-                    "max": float(parts["Max"]),
-                    "liq": float(parts["Liq. Price"]),
-                    "drop": float(parts["Liq. Drop %"])
-                }
-            elif "% Down" in line:
-                parts = dict(item.strip().split("=", 1) for item in line.split("|") if "=" in item)
-                pct = line.split("% Down")[0].strip()
-                levels.append((pct + "% Down", float(parts["= " if "= " in parts else list(parts.keys())[0]])))
+# ========== CHARTING ==========
+def draw_band_charts(blocks):
+    for band in blocks:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True, gridspec_kw={'height_ratios': [2, 1]})
+        eth_df_sorted = eth_df.sort_values("timestamp")
 
-        if band_data:
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+        # Top Chart: Band with ETH line
+        ax1.plot(eth_df_sorted["timestamp"], eth_df_sorted["price"], label="ETH Price", color="green")
+        ax1.axhline(band["min"], color="blue", linestyle="--", label="Band Min")
+        ax1.axhline(band["max"], color="orange", linestyle="--", label="Band Max")
+        ax1.set_title(f"{band['band']} Range Chart")
+        ax1.set_ylabel("Price")
+        ax1.legend()
 
-            # Plot 1 - Range
-            ax1.plot(eth_df.index, eth_df["price"], label="ETH Price", color="green")
-            ax1.axhline(band_data["min"], linestyle="--", color="blue", label="Band Min")
-            ax1.axhline(band_data["max"], linestyle="--", color="orange", label="Band Max")
-            ax1.legend()
-            ax1.set_title("Band 1 Range Chart")
-            ax1.set_ylabel("Price")
-            ax1.grid(True, linestyle='--', alpha=0.5)
+        # Bottom Chart: Drawdown levels only
+        for d in band.get("drawdowns", []):
+            ax2.axhline(d["level"], linestyle="--", color="skyblue", label=d["label"])
+        ax2.set_title(f"{band['band']} Drawdowns Chart")
+        ax2.set_ylabel("Price")
+        ax2.legend()
 
-            # Plot 2 - Drawdowns
-            for label, level in levels:
-                ax2.axhline(level, linestyle="--", label=label, color="skyblue")
-            ax2.set_title("Band 1 Drawdowns Chart")
-            ax2.set_ylabel("Price")
-            ax2.legend()
-            ax2.grid(True, linestyle='--', alpha=0.5)
+        st.pyplot(fig)
 
-            ax2.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H"))
-            plt.setp(ax2.get_xticklabels(), rotation=45, ha="right")
-
-            st.pyplot(fig)
-
-    except Exception as e:
-        st.error(f"Error processing input: {e}")
+# ========== MAIN ==========
+band_data = st.session_state.get("band_data", "")
+if band_data:
+    parsed = parse_band_block(band_data)
+    if parsed:
+        draw_band_charts(parsed)
+    else:
+        st.warning("No valid band data found.")
