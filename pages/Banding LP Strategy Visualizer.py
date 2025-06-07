@@ -55,7 +55,6 @@ col1, col2 = st.columns([2, 2])
 with col1:
     if st.button("Refresh ETH Price"):
         st.session_state.eth_price = fetch_eth_spot()
-        st.rerun()  # <-- ensures chart refresh on updated ETH price
 
 eth_price = st.session_state.get("eth_price", fetch_eth_spot())
 if eth_price:
@@ -68,76 +67,71 @@ st.subheader("2. Paste Band Data")
 st.caption("Paste band and drawdown data below:")
 band_input = st.text_area("Band Data Input", height=150)
 
-# -- Render charts function --
-def render_charts(band_input):
+if st.button("Submit Band Info") and band_input:
     lines = band_input.strip().split("\n")
     band_line = lines[0]
     dd_lines = lines[1:]
 
-    parts = {}
-    band_label = "Band"
-    if "|" in band_line and "=" in band_line:
-        band_label = band_line.split("|")[0].strip()
+    try:
+        # -- Parse Band --
+        parts = {}
+        band_label = "Band"  # fallback
+        if "|" in band_line and "=" in band_line:
+            band_label = band_line.split("|")[0].strip()
 
-    for kv in band_line.split("|"):
-        if "=" in kv:
-            key, val = kv.split("=")
-            key = key.strip()
-            val = val.strip().replace("%", "")
-            parts[key] = float(val)
+        for kv in band_line.split("|"):
+            if "=" in kv:
+                key, val = kv.split("=")
+                key = key.strip()
+                val = val.strip().replace("%", "")
+                parts[key] = float(val)
 
-    band_min = parts["Min"]
-    band_max = parts["Max"]
+        band_min = parts["Min"]
+        band_max = parts["Max"]
 
-    dd_levels = []
-    for line in dd_lines:
-        for kv in line.split("|"):
-            if "Down" in kv and "=" in kv:
-                label, val = kv.split("=")
-                dd_levels.append((label.strip(), float(val.strip())))
-                break
+        # -- Parse Drawdowns from "X Down = Y" format --
+        dd_levels = []
+        for line in dd_lines:
+            for kv in line.split("|"):
+                if "Down" in kv and "=" in kv:
+                    label, val = kv.split("=")
+                    dd_levels.append((label.strip(), float(val.strip())))
+                    break
 
-    df = fetch_eth_candles()
-    df.set_index("timestamp", inplace=True)
-    ha_df = compute_heikin_ashi(df)
-    ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
-    ha_plot_df.index.name = "Date"
+        # -- Get data and convert to HA candles --
+        df = fetch_eth_candles()
+        df.set_index("timestamp", inplace=True)
+        ha_df = compute_heikin_ashi(df)
 
-    ap_lines = [
-        mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
-        mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
-    ]
+        # -- mplfinance plot (candles) --
+        ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
+        ha_plot_df.index.name = "Date"
 
-    fig_mpf, _ = mpf.plot(
-        ha_plot_df,
-        type='candle',
-        style='charles',
-        ylabel="Price",
-        title=f"{band_label} Range (Heikin-Ashi)",
-        addplot=ap_lines,
-        figsize=(10, 5),
-        returnfig=True
-    )
-    st.pyplot(fig_mpf)
+        ap_lines = [
+            mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
+            mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
+        ]
 
-    fig, ax2 = plt.subplots(figsize=(10, 3))
-    for label, price in dd_levels:
-        ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
-    ax2.set_title(f"{band_label} Drawdowns")
-    ax2.set_ylabel("Price")
-    ax2.legend()
-    st.pyplot(fig)
+        fig_mpf, _ = mpf.plot(
+            ha_plot_df,
+            type='candle',
+            style='charles',
+            ylabel="Price",
+            title=f"{band_label} Range (Heikin-Ashi)",
+            addplot=ap_lines,
+            figsize=(10, 5),
+            returnfig=True
+        )
+        st.pyplot(fig_mpf)
 
-# -- Handle submission with rerun guard --
-if st.button("Submit Band Info"):
-    st.session_state.band_input = band_input.strip()
-    st.session_state.submitted_this_session = True
-    st.rerun()
+        # -- Drawdowns using actual pasted values --
+        fig, ax2 = plt.subplots(figsize=(10, 3))
+        for label, price in dd_levels:
+            ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
+        ax2.set_title(f"{band_label} Drawdowns")
+        ax2.set_ylabel("Price")
+        ax2.legend()
+        st.pyplot(fig)
 
-# -- Redraw charts only after rerun or when reloading --
-if eth_price and st.session_state.get("band_input") and not st.session_state.get("submitted_this_session"):
-    render_charts(st.session_state["band_input"])
-
-# -- Reset guard flag after rendering once --
-if st.session_state.get("submitted_this_session"):
-    st.session_state.submitted_this_session = False
+    except Exception as e:
+        st.error(f"Failed to parse data or generate chart: {e}")
