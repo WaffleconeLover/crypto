@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import requests
+from datetime import datetime
 
 @st.cache_data(ttl=300)
 def get_eth_price():
@@ -11,6 +12,31 @@ def get_eth_price():
         return response.json()['ethereum']['usd']
     except:
         return None
+
+@st.cache_data(ttl=300)
+def get_eth_ohlc():
+    url = "https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days=1"
+    try:
+        df = pd.DataFrame(requests.get(url).json(), columns=['timestamp', 'open', 'high', 'low', 'close'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df = df.set_index('timestamp').resample('15min').agg({
+            'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last'
+        }).dropna()
+        return df
+    except:
+        return pd.DataFrame()
+
+def compute_heikin_ashi(df):
+    ha_df = pd.DataFrame(index=df.index)
+    ha_df['close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+    ha_df['open'] = 0.0
+    ha_df.iloc[0, ha_df.columns.get_loc('open')] = (df.iloc[0]['open'] + df.iloc[0]['close']) / 2
+    for i in range(1, len(df)):
+        ha_df.iloc[i, ha_df.columns.get_loc('open')] = (
+            ha_df.iloc[i - 1]['open'] + ha_df.iloc[i - 1]['close']) / 2
+    ha_df['high'] = ha_df[['open', 'close']].join(df['high']).max(axis=1)
+    ha_df['low'] = ha_df[['open', 'close']].join(df['low']).min(axis=1)
+    return ha_df
 
 # Sidebar: ETH price controls
 st.sidebar.title("Chart Controls")
@@ -49,21 +75,34 @@ if raw_input:
 
 # Plot chart
 if bands:
-    df = pd.DataFrame(bands)
-    fig, ax = plt.subplots(figsize=(10, 6))
+    df_bands = pd.DataFrame(bands)
+    df_ohlc = get_eth_ohlc()
+    ha = compute_heikin_ashi(df_ohlc)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Plot Heikin Ashi candles
+    for i in range(len(ha)):
+        color = 'green' if ha.iloc[i]['close'] >= ha.iloc[i]['open'] else 'red'
+        ax.plot([ha.index[i], ha.index[i]], [ha.iloc[i]['low'], ha.iloc[i]['high']], color=color, linewidth=1)
+        ax.add_patch(plt.Rectangle((ha.index[i], min(ha.iloc[i]['open'], ha.iloc[i]['close'])),
+                                   width=pd.Timedelta(minutes=12),
+                                   height=abs(ha.iloc[i]['close'] - ha.iloc[i]['open']),
+                                   color=color, alpha=0.6))
+
+    # Plot bands
     ax.axhline(eth_price, color='gray', linestyle='--', label=f"ETH Spot = ${eth_price:.2f}")
-
-    for _, row in df.iterrows():
-        ax.fill_betweenx([row['Min'], row['Max']], 0, 1, color='green', alpha=0.3, transform=ax.get_yaxis_transform())
-        ax.text(0.5, (row['Min'] + row['Max']) / 2, 
-                f"{row['Band']}\n${row['Min']} - ${row['Max']}\nLiq: ${row['Liq Price']} ({row['Liq Drop %']}%)",
-                ha='center', va='center', fontsize=9, transform=ax.get_yaxis_transform())
+    for _, row in df_bands.iterrows():
         ax.axhline(row['Liq Price'], color='red', linestyle=':', linewidth=1)
+        ax.fill_betweenx([row['Min'], row['Max']], ha.index[0], ha.index[-1], color='green', alpha=0.3)
+        ax.text(ha.index[int(len(ha)*0.95)], (row['Min'] + row['Max']) / 2,
+                f"{row['Band']}\n${row['Min']} - ${row['Max']}\nLiq: ${row['Liq Price']} ({row['Liq Drop %']}%)",
+                va='center', fontsize=8)
 
-    ax.set_ylim(min(df['Liq Price'].min(), eth_price) * 0.95, df['Max'].max() * 1.05)
+    ax.set_ylim(min(df_bands['Liq Price'].min(), eth_price) * 0.95, df_bands['Max'].max() * 1.05)
+    ax.set_xlim(ha.index[0], ha.index[-1])
     ax.set_title("Liquidity Bands and Liquidation Zones")
     ax.set_ylabel("ETH Price")
-    ax.set_xticks([])
     ax.legend()
     st.pyplot(fig)
 else:
