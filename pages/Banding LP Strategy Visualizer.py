@@ -50,12 +50,14 @@ st.sidebar.markdown(f"**Current ETH Price:** ${eth_price}")
 # Main UI
 st.title("Banding LP Strategy Visualizer")
 raw_input = st.text_area("Paste Band Chart Setups Text", height=300)
+run_button = st.button("Generate Chart")
 
 bands = []
 liq_lines = []
 
-if raw_input:
+if run_button and raw_input:
     for line in raw_input.splitlines():
+        line = line.strip()
         parts = [p.strip() for p in line.split('|') if '=' in p]
         try:
             if line.lower().startswith("band") and len(parts) >= 5:
@@ -114,5 +116,5 @@ if bands:
     ax.set_ylabel("ETH Price")
     ax.legend()
     st.pyplot(fig)
-else:
+elif run_button:
     st.info("Paste your Band Chart Setups to visualize the ranges.")
