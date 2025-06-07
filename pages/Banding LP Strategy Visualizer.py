@@ -85,15 +85,13 @@ if st.button("Submit Band Info") and band_input:
         band_min = parts["Min"]
         band_max = parts["Max"]
 
-        # -- Parse Drawdowns (fixed parsing to use correct price for each label) --
+        # -- Parse Drawdowns using "X Down = Y" only --
         dd_levels = []
         for line in dd_lines:
-            tokens = [kv.strip() for kv in line.split("|") if "=" in kv]
-            label = line.split("|")[0].split("=")[0].strip()
-            for token in tokens:
-                k, v = token.split("=")
-                if "Liq. Price" in k:
-                    dd_levels.append((label, float(v.strip().replace("%", ""))))
+            for kv in line.split("|"):
+                if "Down" in kv and "=" in kv:
+                    label, val = kv.split("=")
+                    dd_levels.append((label.strip(), float(val.strip())))
                     break
 
         # -- Get data and convert to HA candles --
@@ -122,7 +120,7 @@ if st.button("Submit Band Info") and band_input:
         )
         st.pyplot(fig_mpf)
 
-        # -- Drawdowns using actual pasted values --
+        # -- Drawdowns using actual "X Down = Y" values --
         fig, ax2 = plt.subplots(figsize=(10, 3))
         for label, price in dd_levels:
             ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
