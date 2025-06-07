@@ -59,7 +59,7 @@ liq_lines = []
 if run_button and raw_input:
     for line in raw_input.splitlines():
         line = line.strip()
-        line = re.sub(r"\|?\s*Spread\s*=\s*[^|]+", "", line)  # Remove Spread fields
+        line = re.sub(r"\|?\s*Spread\s*=\s*[^|]+", "", line)  # Remove 'Spread = ...'
         parts = [p.strip() for p in line.split('|') if '=' in p]
         try:
             if line.lower().startswith("band"):
