@@ -48,15 +48,19 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
-def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
-    scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_dict = json.loads(st.secrets["google_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    gc = gspread.authorize(creds)
-    worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
-    cells = worksheet.get(cell_range)
-    lines = [row[0] for row in cells if row and row[0].strip()]
-    return lines
+def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B29"):
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+        creds_dict = json.loads(st.secrets["google_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        gc = gspread.authorize(creds)
+        worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
+        cells = worksheet.get(cell_range)
+        lines = [row[0] for row in cells if row and row[0].strip()]
+        return lines
+    except Exception as e:
+        st.error(f"Error loading sheet data: {e}")
+        return []
 
 def load_csv():
     return pd.read_csv("data/bands.csv")
