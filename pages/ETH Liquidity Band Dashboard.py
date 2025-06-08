@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 import json
 
 st.set_page_config(layout="wide")
-st.title("ETH Liquidity Band Dashboard (Auto Mode Enabled)")
+st.title("ETH Liquidity Band Dashboard")
 
 # -- Constants --
 DEXSCREENER_API = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
@@ -48,64 +48,17 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
-def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B29"):
+def load_google_sheet_text(sheet_id, tab_name="Banding", block=0):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     creds_dict = json.loads(st.secrets["google_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
+    start_row = 14 + block * 4
+    end_row = start_row + 3
+    cell_range = f"B{start_row}:B{end_row}"
     cells = worksheet.get(cell_range)
-    lines = [row[0] for row in cells if row and row[0].strip()]
-    return lines
-
-def load_csv():
-    return pd.read_csv("data/bands.csv")
-
-def render_chart_from_row(row, eth_price=None):
-    band_label = row["Label"]
-    band_min = row["Min"]
-    band_max = row["Max"]
-    band_mid = (band_min + band_max) / 2
-
-    dd_levels = [(level, row[level]) for level in ["Down5", "Down10", "Down15"]]
-
-    df = fetch_eth_candles()
-    df.set_index("timestamp", inplace=True)
-    ha_df = compute_heikin_ashi(df)
-    ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
-    ha_plot_df.index.name = "Date"
-
-    ap_lines = [
-        mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
-        mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
-    ]
-
-    if eth_price:
-        ap_lines.append(mpf.make_addplot([eth_price] * len(ha_plot_df), color='red'))
-
-    fig_mpf, ax_mpf = mpf.plot(
-        ha_plot_df,
-        type='candle',
-        style='charles',
-        ylabel="Price",
-        title=f"{band_label} Range (Heikin-Ashi)",
-        addplot=ap_lines,
-        figsize=(10, 5),
-        returnfig=True
-    )
-
-    if eth_price and band_min <= eth_price <= band_max:
-        ax_mpf[0].axhspan(band_min, band_max, color='green', alpha=0.2)
-
-    st.pyplot(fig_mpf)
-
-    fig, ax2 = plt.subplots(figsize=(10, 3))
-    for label, price in dd_levels:
-        ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
-    ax2.set_title(f"{band_label} Drawdowns")
-    ax2.set_ylabel("Price")
-    ax2.legend()
-    st.pyplot(fig)
+    return "\n".join([row[0] for row in cells if row and row[0].strip()])
 
 def render_charts(input_text):
     lines = input_text.strip().split("\n")
@@ -183,51 +136,28 @@ def render_charts(input_text):
         st.error(f"Failed to parse data or generate chart: {e}")
 
 # ---- MAIN LOGIC ----
-mode = st.radio("Data Source Mode", ["Manual", "From Google Sheet", "From CSV"])
-
-auto_refresh = st.checkbox("Auto-refresh ETH price every 30 sec")
-if auto_refresh:
-    st.experimental_rerun()
-
-eth_price = st.session_state.get("eth_price", fetch_eth_spot())
+st.markdown("**ETH Price Source: DexScreener / OHLC: CoinGecko**")
+eth_price = fetch_eth_spot()
 if eth_price:
-    st.markdown(f"**Latest ETH Price:** ${eth_price:,.2f}")
+    st.success(f"Latest ETH Price: ${eth_price:,.2f}")
 else:
-    st.error("Failed to fetch ETH price data.")
+    st.error("Failed to fetch ETH spot price.")
+
+mode = st.radio("Select Input Mode", ["Manual", "From Google Sheet"])
 
 if mode == "Manual":
-    st.subheader("Paste Band Data")
-    band_input = st.text_area("Band Data Input", height=150)
-    if st.button("Submit Band Info") and band_input:
-        st.session_state.band_input = band_input.strip()
-    if "band_input" in st.session_state:
-        render_charts(st.session_state["band_input"])
+    band_input = st.text_area("Paste Band Data", height=150)
+    if st.button("Render Chart") and band_input:
+        render_charts(band_input.strip())
 
 elif mode == "From Google Sheet":
-    sheet_id = "1lYMzXhF_bP1cCFLyHUmXHCZv4WbAHh2QwFvD-AdhAQY"
+    band_choice = st.selectbox("Choose Band Block", ["Band 1", "Band 2", "Band 3", "Band 4"])
+    block_index = ["Band 1", "Band 2", "Band 3", "Band 4"].index(band_choice)
     try:
-        lines = load_google_sheet_text(sheet_id, "Banding", "B14:B29")
-        bands_raw = [line for line in lines if line.strip()]
-        groups = [line.split("|")[0].strip() for line in bands_raw if "|" in line]
-
-        selected_group = st.selectbox("Select Band Group", groups)
-        idx = groups.index(selected_group)
-        selected_block = bands_raw[idx : idx + 4]
-        band_text = "\n".join(selected_block)
-
-        st.text_area("Band Data Pulled from Sheet", band_text, height=150)
-        if band_text:
-            render_charts(band_text)
-
+        sheet_id = "1lYMzXhF_bP1cCFLyHUmXHCZv4WbAHh2QwFvD-AdhAQY"
+        text = load_google_sheet_text(sheet_id, "Banding", block=block_index)
+        st.text_area("Pulled Data", text, height=150)
+        if text:
+            render_charts(text)
     except Exception as e:
         st.error(f"Error loading sheet data: {e}")
-        st.info("Falling back to manual input:")
-        band_input = st.text_area("Paste Band Data", height=150)
-        if st.button("Submit Band Info") and band_input:
-            render_charts(band_input.strip())
-
-elif mode == "From CSV":
-    df_bands = load_csv()
-    if not df_bands.empty:
-        for _, row in df_bands.iterrows():
-            render_chart_from_row(row, eth_price)
