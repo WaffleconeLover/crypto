@@ -7,6 +7,7 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 import json
+import traceback
 
 st.set_page_config(layout="wide")
 st.title("ETH Liquidity Band Dashboard (Auto Mode Enabled)")
@@ -56,11 +57,7 @@ def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
 
     spreadsheet = gc.open_by_key(sheet_id)
     available_tabs = [ws.title for ws in spreadsheet.worksheets()]
-    st.write("✅ Tabs the service account can see:", available_tabs)
-
-    if tab_name not in available_tabs:
-        st.error(f"'{tab_name}' not found. Visible tabs: {available_tabs}")
-        raise ValueError(f"Worksheet '{tab_name}' not found")
+    st.write("Tabs visible to service account:", available_tabs)  # Diagnostic
 
     worksheet = spreadsheet.worksheet(tab_name)
     cells = worksheet.get(cell_range)
@@ -228,6 +225,8 @@ elif mode == "From Google Sheet":
             render_charts(band_text)
     except Exception as e:
         st.error(f"Failed to load sheet: {e}")
+        st.text("Traceback:")
+        st.code(traceback.format_exc())
         st.info("Falling back to manual input:")
         band_input = st.text_area("Paste Band Data", height=150)
         if st.button("Submit Band Info") and band_input:
