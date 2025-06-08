@@ -49,14 +49,24 @@ def compute_heikin_ashi(df):
     return ha_df
 
 def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
-    scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_dict = json.loads(st.secrets["google_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    gc = gspread.authorize(creds)
-    worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
-    cells = worksheet.get(cell_range)
-    lines = [row[0] for row in cells if row and row[0].strip()]
-    return lines
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+        creds_dict = json.loads(st.secrets["google_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(sheet_id)
+
+        worksheet_list = [ws.title for ws in sh.worksheets()]
+        if tab_name not in worksheet_list:
+            raise ValueError(f"Worksheet '{tab_name}' not found in Google Sheet. Available sheets: {worksheet_list}")
+
+        worksheet = sh.worksheet(tab_name)
+        cells = worksheet.get(cell_range)
+        lines = [row[0] for row in cells if row and row[0].strip()]
+        return lines
+    except Exception as e:
+        st.error(f"Error loading sheet data: {e}")
+        return []
 
 def load_csv():
     return pd.read_csv("data/bands.csv")
@@ -227,7 +237,7 @@ elif mode == "From Google Sheet":
         if band_text:
             render_charts(band_text)
     except Exception as e:
-        st.error(f"Error loading sheet data: {e}")
+        st.error(f"Failed to load sheet: {e}")
         st.info("Falling back to manual input:")
         band_input = st.text_area("Paste Band Data", height=150)
         if st.button("Submit Band Info") and band_input:
