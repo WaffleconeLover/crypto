@@ -6,6 +6,7 @@ import mplfinance as mpf
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
+import json
 
 st.set_page_config(layout="wide")
 st.title("ETH Liquidity Band Dashboard (Auto Mode Enabled)")
@@ -49,7 +50,7 @@ def compute_heikin_ashi(df):
 
 def load_google_sheet_text(sheet_id, tab_name="BandSetup", cell_range="B14:B17"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_dict = dict(st.secrets["google_service_account"])  # Fixed: use TOML directly
+    creds_dict = json.loads(st.secrets["google_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
@@ -221,10 +222,12 @@ elif mode == "From Google Sheet":
     try:
         cell_range = band_ranges[band_option]
         lines = load_google_sheet_text(sheet_id, tab_name, cell_range)
-        band_text = "\n".join(lines)
+        band_text = "\n".join(lines) if lines else ""
         st.text_area("Band Data Pulled from Sheet", band_text, height=150)
-        if band_text:
+        if band_text.strip():
             render_charts(band_text)
+        else:
+            st.warning("No data found in the selected range. Please check the sheet.")
     except Exception as e:
         st.error(f"Failed to load sheet: {e}")
         st.info("Falling back to manual input:")
