@@ -50,7 +50,7 @@ def compute_heikin_ashi(df):
 
 def load_google_sheet_text(sheet_id, tab_name="BandSetup", cell_range="B14:B17"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_dict = json.loads(st.secrets["GOOGLE_CREDS"])
+    creds_dict = json.loads(st.secrets["google_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
@@ -60,6 +60,52 @@ def load_google_sheet_text(sheet_id, tab_name="BandSetup", cell_range="B14:B17")
 
 def load_csv():
     return pd.read_csv("data/bands.csv")
+
+def render_chart_from_row(row, eth_price=None):
+    band_label = row["Label"]
+    band_min = row["Min"]
+    band_max = row["Max"]
+    band_mid = (band_min + band_max) / 2
+
+    dd_levels = [(level, row[level]) for level in ["Down5", "Down10", "Down15"]]
+
+    df = fetch_eth_candles()
+    df.set_index("timestamp", inplace=True)
+    ha_df = compute_heikin_ashi(df)
+    ha_plot_df = ha_df[["open", "high", "low", "close"]].copy()
+    ha_plot_df.index.name = "Date"
+
+    ap_lines = [
+        mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
+        mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
+    ]
+
+    if eth_price:
+        ap_lines.append(mpf.make_addplot([eth_price] * len(ha_plot_df), color='red'))
+
+    fig_mpf, ax_mpf = mpf.plot(
+        ha_plot_df,
+        type='candle',
+        style='charles',
+        ylabel="Price",
+        title=f"{band_label} Range (Heikin-Ashi)",
+        addplot=ap_lines,
+        figsize=(10, 5),
+        returnfig=True
+    )
+
+    if eth_price and band_min <= eth_price <= band_max:
+        ax_mpf[0].axhspan(band_min, band_max, color='green', alpha=0.2)
+
+    st.pyplot(fig_mpf)
+
+    fig, ax2 = plt.subplots(figsize=(10, 3))
+    for label, price in dd_levels:
+        ax2.axhline(price, linestyle="--", label=f"{label} = {int(price)}", color="skyblue")
+    ax2.set_title(f"{band_label} Drawdowns")
+    ax2.set_ylabel("Price")
+    ax2.legend()
+    st.pyplot(fig)
 
 def render_charts(input_text):
     lines = input_text.strip().split("\n")
