@@ -64,15 +64,7 @@ def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
 
     worksheet = spreadsheet.worksheet(tab_name)
     cells = worksheet.get(cell_range)
-
-    lines = []
-    for row in cells:
-        if row and len(row) > 0 and row[0].strip():
-            lines.append(row[0].strip())
-
-    if not lines:
-        raise ValueError(f"No valid data found in range: {cell_range}")
-
+    lines = [row[0] for row in cells if row and row[0].strip()]
     return lines
 
 def load_csv():
@@ -199,7 +191,9 @@ auto_refresh = st.checkbox("Auto-refresh ETH price every 30 sec")
 if auto_refresh:
     st.experimental_rerun()
 
-eth_price = st.session_state.get("eth_price", fetch_eth_spot())
+eth_price = fetch_eth_spot()
+st.session_state.eth_price = eth_price
+
 if eth_price:
     st.markdown(f"**Latest ETH Price:** ${eth_price:,.2f}")
 else:
