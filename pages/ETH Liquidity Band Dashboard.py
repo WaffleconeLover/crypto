@@ -7,7 +7,6 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import time  # required for timestamp display
 
 st.set_page_config(layout="wide")
 st.title("ETH Liquidity Band Dashboard (Auto Mode Enabled)")
@@ -53,14 +52,13 @@ def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     creds_dict = json.loads(st.secrets["google_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    gc = gspread.authorize(creds)
 
-    # 🧠 Injected metadata refresh logic
-    gc.session = gspread.Client(auth=gc.auth)
+    gc = gspread.Client(auth=creds)
+    gc.session = gspread.httpsession.HTTPSession()
+
     spreadsheet = gc.open_by_key(sheet_id)
     available_tabs = [ws.title for ws in spreadsheet.worksheets()]
-    st.write("⏰ Timestamp:", time.strftime("%Y-%m-%d %H:%M:%S"))
-    st.write("✅ Tabs the service account can see:", available_tabs)
+    st.write("Tabs visible to service account:", available_tabs)
 
     if tab_name not in available_tabs:
         st.error(f"'{tab_name}' not found in: {available_tabs}")
