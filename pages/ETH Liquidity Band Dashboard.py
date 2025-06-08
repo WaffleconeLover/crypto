@@ -227,7 +227,7 @@ elif mode == "From Google Sheet":
         if band_text:
             render_charts(band_text)
     except Exception as e:
-        st.error(f"Error loading sheet data: {e}")
+        st.error(f"Failed to load sheet: {e}")
         st.info("Falling back to manual input:")
         band_input = st.text_area("Paste Band Data", height=150)
         if st.button("Submit Band Info") and band_input:
