@@ -56,8 +56,6 @@ def load_google_sheet_text(sheet_id, tab_name="BandingLiveTest", cell_range="B14
     gc = gspread.authorize(creds)
 
     spreadsheet = gc.open_by_key(sheet_id)
-    available_tabs = [ws.title for ws in spreadsheet.worksheets()]
-    st.write("✅ Tabs visible to service account:", available_tabs)  # <-- Injected change
 
     worksheet = spreadsheet.worksheet(tab_name)
     cells = worksheet.get(cell_range)
