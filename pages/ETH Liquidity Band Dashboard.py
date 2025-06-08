@@ -204,7 +204,7 @@ if mode == "Manual":
 
 elif mode == "From Google Sheet":
     sheet_id = "1lYMzXhF_bP1cCFLyHUmXHCZv4WbAHh2QwFvD-AdhAQY"
-    tab_name = "Banding"
+    tab_name = "BandingLiveTest"
     band_option = st.selectbox(
         "Select Band to Load from Sheet",
         ["Band 1", "Band 2", "Band 3", "Band 4"]
