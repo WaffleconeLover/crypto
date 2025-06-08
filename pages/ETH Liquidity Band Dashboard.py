@@ -55,7 +55,7 @@ def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B29"):
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
     cells = worksheet.get(cell_range)
-    lines = [row[0] for row in cells if row and len(row) > 0 and row[0].strip()]
+    lines = [row[0] for row in cells if row and row[0].strip()]
     return lines
 
 def load_csv():
@@ -66,7 +66,9 @@ def render_chart_from_row(row, eth_price=None):
     band_min = row["Min"]
     band_max = row["Max"]
     band_mid = (band_min + band_max) / 2
+
     dd_levels = [(level, row[level]) for level in ["Down5", "Down10", "Down15"]]
+
     df = fetch_eth_candles()
     df.set_index("timestamp", inplace=True)
     ha_df = compute_heikin_ashi(df)
@@ -77,6 +79,7 @@ def render_chart_from_row(row, eth_price=None):
         mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
         mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
     ]
+
     if eth_price:
         ap_lines.append(mpf.make_addplot([eth_price] * len(ha_plot_df), color='red'))
 
@@ -90,6 +93,7 @@ def render_chart_from_row(row, eth_price=None):
         figsize=(10, 5),
         returnfig=True
     )
+
     if eth_price and band_min <= eth_price <= band_max:
         ax_mpf[0].axhspan(band_min, band_max, color='green', alpha=0.2)
 
@@ -107,15 +111,18 @@ def render_charts(input_text):
     lines = input_text.strip().split("\n")
     band_line = lines[0]
     dd_lines = lines[1:]
+
     try:
         parts = {}
         band_label = band_line.split("|")[0].strip() if "|" in band_line else "Band"
+
         for kv in band_line.split("|"):
             if "=" in kv:
                 key, val = kv.split("=")
                 key = key.strip()
                 val = val.strip().replace("%", "")
                 parts[key] = float(val)
+
         band_min = parts["Min"]
         band_max = parts["Max"]
         band_mid = (band_min + band_max) / 2
@@ -161,6 +168,7 @@ def render_charts(input_text):
             fontsize=10,
             bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
         )
+
         st.pyplot(fig_mpf)
 
         fig, ax2 = plt.subplots(figsize=(10, 3))
@@ -176,6 +184,7 @@ def render_charts(input_text):
 
 # ---- MAIN LOGIC ----
 mode = st.radio("Data Source Mode", ["Manual", "From Google Sheet", "From CSV"])
+
 auto_refresh = st.checkbox("Auto-refresh ETH price every 30 sec")
 if auto_refresh:
     st.experimental_rerun()
@@ -198,10 +207,18 @@ elif mode == "From Google Sheet":
     sheet_id = "1lYMzXhF_bP1cCFLyHUmXHCZv4WbAHh2QwFvD-AdhAQY"
     try:
         lines = load_google_sheet_text(sheet_id, "Banding", "B14:B29")
-        band_text = "\n".join(lines)
+        bands_raw = [line for line in lines if line.strip()]
+        groups = [line.split("|")[0].strip() for line in bands_raw if "|" in line]
+
+        selected_group = st.selectbox("Select Band Group", groups)
+        idx = groups.index(selected_group)
+        selected_block = bands_raw[idx : idx + 4]
+        band_text = "\n".join(selected_block)
+
         st.text_area("Band Data Pulled from Sheet", band_text, height=150)
         if band_text:
             render_charts(band_text)
+
     except Exception as e:
         st.error(f"Error loading sheet data: {e}")
         st.info("Falling back to manual input:")
