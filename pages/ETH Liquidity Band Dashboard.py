@@ -48,17 +48,16 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
+# ✅ Updated version to avoid 'httpsession' error and list visible tabs
 def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     creds_dict = json.loads(st.secrets["google_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-
-    gc = gspread.Client(auth=creds)
-    gc.session = gspread.httpsession.HTTPSession()
+    gc = gspread.authorize(creds)
 
     spreadsheet = gc.open_by_key(sheet_id)
     available_tabs = [ws.title for ws in spreadsheet.worksheets()]
-    st.write("Tabs visible to service account:", available_tabs)
+    st.write("✅ Tabs the service account can see:", available_tabs)
 
     if tab_name not in available_tabs:
         st.error(f"'{tab_name}' not found in: {available_tabs}")
