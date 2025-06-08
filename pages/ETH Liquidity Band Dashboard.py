@@ -58,14 +58,21 @@ def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
     available_tabs = [ws.title for ws in spreadsheet.worksheets()]
     st.write("Tabs visible to service account:", available_tabs)
 
-    # Check for exact match
     if tab_name not in available_tabs:
         st.error(f"'{tab_name}' not found in: {available_tabs}")
         raise ValueError(f"Worksheet '{tab_name}' not found")
 
     worksheet = spreadsheet.worksheet(tab_name)
     cells = worksheet.get(cell_range)
-    lines = [row[0] for row in cells if row and row[0].strip()]
+
+    lines = []
+    for row in cells:
+        if row and len(row) > 0 and row[0].strip():
+            lines.append(row[0].strip())
+
+    if not lines:
+        raise ValueError(f"No valid data found in range: {cell_range}")
+
     return lines
 
 def load_csv():
