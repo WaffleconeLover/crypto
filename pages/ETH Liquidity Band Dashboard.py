@@ -48,7 +48,7 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
-def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
+def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B29"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     creds_dict = json.loads(st.secrets["google_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
