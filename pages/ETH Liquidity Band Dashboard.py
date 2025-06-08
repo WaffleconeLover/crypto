@@ -11,7 +11,6 @@ import json
 st.set_page_config(layout="wide")
 st.title("ETH Liquidity Band Dashboard (Auto Mode Enabled)")
 
-# -- Constants --
 DEXSCREENER_API = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
 COINGECKO_API = "https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days=1"
 
@@ -66,7 +65,6 @@ def render_chart_from_row(row, eth_price=None):
     band_min = row["Min"]
     band_max = row["Max"]
     band_mid = (band_min + band_max) / 2
-
     dd_levels = [(level, row[level]) for level in ["Down5", "Down10", "Down15"]]
 
     df = fetch_eth_candles()
@@ -79,7 +77,6 @@ def render_chart_from_row(row, eth_price=None):
         mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
         mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
     ]
-
     if eth_price:
         ap_lines.append(mpf.make_addplot([eth_price] * len(ha_plot_df), color='red'))
 
@@ -121,7 +118,10 @@ def render_charts(input_text):
                 key, val = kv.split("=")
                 key = key.strip()
                 val = val.strip().replace("%", "")
-                parts[key] = float(val)
+                try:
+                    parts[key] = float(val)
+                except ValueError:
+                    st.warning(f"Skipping invalid value for {key}: {val}")
 
         band_min = parts["Min"]
         band_max = parts["Max"]
