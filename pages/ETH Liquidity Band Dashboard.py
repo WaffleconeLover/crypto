@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 import json
 
 st.set_page_config(layout="wide")
-st.title("ETH Liquidity Band Dashboard (Auto Mode Enabled)")
+st.title("ETH Liquidity Band Dashboard")
 
 # -- Constants --
 DEXSCREENER_API = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
@@ -48,19 +48,14 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
-def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
-    try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-        creds_dict = json.loads(st.secrets["google_service_account"])
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        gc = gspread.authorize(creds)
-        worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
-        cells = worksheet.get(cell_range)
-        lines = [row[0] for row in cells if row and row[0].strip()]
-        return lines
-    except Exception as e:
-        st.error(f"Error loading sheet data: {e}")
-        return []
+def load_google_sheet_text(sheet_id, tab_name, cell_range):
+    scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    creds_dict = json.loads(st.secrets["google_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    gc = gspread.authorize(creds)
+    worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
+    cells = worksheet.get(cell_range)
+    return [row[0] for row in cells if row and row[0].strip()]
 
 def render_charts(input_text):
     lines = input_text.strip().split("\n")
@@ -137,28 +132,16 @@ def render_charts(input_text):
     except Exception as e:
         st.error(f"Failed to parse data or generate chart: {e}")
 
-# ---- MAIN LOGIC ----
-mode = st.radio("Data Source Mode", ["Manual", "From Google Sheet", "From CSV"])
+# -- MAIN UI --
+mode = st.radio("Data Source Mode", ["From Google Sheet", "Manual"])
 
-auto_refresh = st.checkbox("Auto-refresh ETH price every 30 sec")
-if auto_refresh:
-    st.experimental_rerun()
-
-eth_price = st.session_state.get("eth_price", fetch_eth_spot())
+eth_price = fetch_eth_spot()
 if eth_price:
     st.markdown(f"**Latest ETH Price:** ${eth_price:,.2f}")
 else:
-    st.error("Failed to fetch ETH price data.")
+    st.error("Failed to fetch ETH price.")
 
-if mode == "Manual":
-    st.subheader("Paste Band Data")
-    band_input = st.text_area("Band Data Input", height=150)
-    if st.button("Submit Band Info") and band_input:
-        st.session_state.band_input = band_input.strip()
-    if "band_input" in st.session_state:
-        render_charts(st.session_state["band_input"])
-
-elif mode == "From Google Sheet":
+if mode == "From Google Sheet":
     sheet_id = "1lYMzXhF_bP1cCFLyHUmXHCZv4WbAHh2QwFvD-AdhAQY"
     tab_name = "Banding"
 
@@ -178,17 +161,14 @@ elif mode == "From Google Sheet":
         cell_range = band_ranges[band_option]
         lines = load_google_sheet_text(sheet_id, tab_name, cell_range)
         band_text = "\n".join(lines)
-        st.text_area("Band Data Pulled from Sheet", band_text, height=150)
+        st.text_area("Loaded Band Data", band_text, height=150)
         if band_text:
             render_charts(band_text)
     except Exception as e:
-        st.error(f"Failed to load sheet: {e}")
+        st.error(f"Error loading sheet data: {e}")
 
-elif mode == "From CSV":
-    try:
-        df_bands = pd.read_csv("data/bands.csv")
-        if not df_bands.empty:
-            for _, row in df_bands.iterrows():
-                render_chart_from_row(row, eth_price)
-    except:
-        st.error("Failed to load or parse CSV.")
+elif mode == "Manual":
+    st.subheader("Paste Band Data")
+    band_input = st.text_area("Band Data Input", height=150)
+    if st.button("Submit Band Info") and band_input:
+        render_charts(band_input.strip())
