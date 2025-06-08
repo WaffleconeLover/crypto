@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import mplfinance as mpf
 from datetime import datetime
 import gspread
-import json
 from google.oauth2.service_account import Credentials
 
 st.set_page_config(layout="wide")
@@ -50,7 +49,7 @@ def compute_heikin_ashi(df):
 
 def load_google_sheet_text(sheet_id, tab_name="BandSetup", cell_range="B14:B17"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_dict = json.loads(st.secrets["google_service_account"])
+    creds_dict = st.secrets["google_service_account"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
