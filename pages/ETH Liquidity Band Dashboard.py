@@ -48,7 +48,7 @@ def compute_heikin_ashi(df):
     ha_df["low"] = df[["low", "open", "close"]].min(axis=1)
     return ha_df
 
-def load_google_sheet_text(sheet_id, tab_name="BandSetup", cell_range="B14:B17"):
+def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     creds_dict = json.loads(st.secrets["google_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
@@ -205,7 +205,7 @@ if mode == "Manual":
 
 elif mode == "From Google Sheet":
     sheet_id = "1lYMzXhF_bP1cCFLyHUmXHCZv4WbAHh2QwFvD-AdhAQY"
-    tab_name = "BandSetup"
+    tab_name = "Banding"
 
     band_option = st.selectbox(
         "Select Band to Load from Sheet",
@@ -222,12 +222,10 @@ elif mode == "From Google Sheet":
     try:
         cell_range = band_ranges[band_option]
         lines = load_google_sheet_text(sheet_id, tab_name, cell_range)
-        band_text = "\n".join(lines) if lines else ""
+        band_text = "\n".join(lines)
         st.text_area("Band Data Pulled from Sheet", band_text, height=150)
-        if band_text.strip():
+        if band_text:
             render_charts(band_text)
-        else:
-            st.warning("No data found in the selected range. Please check the sheet.")
     except Exception as e:
         st.error(f"Failed to load sheet: {e}")
         st.info("Falling back to manual input:")
