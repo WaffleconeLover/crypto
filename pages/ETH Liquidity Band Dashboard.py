@@ -56,7 +56,8 @@ def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
 
     spreadsheet = gc.open_by_key(sheet_id)
     available_tabs = [ws.title for ws in spreadsheet.worksheets()]
-    st.write("Tabs visible to service account:", available_tabs)
+    print("DEBUG - Tabs available:", available_tabs)
+    st.write("✅ Tabs the service account can see:", available_tabs)
 
     if tab_name not in available_tabs:
         st.error(f"'{tab_name}' not found in: {available_tabs}")
@@ -191,9 +192,7 @@ auto_refresh = st.checkbox("Auto-refresh ETH price every 30 sec")
 if auto_refresh:
     st.experimental_rerun()
 
-eth_price = fetch_eth_spot()
-st.session_state.eth_price = eth_price
-
+eth_price = st.session_state.get("eth_price", fetch_eth_spot())
 if eth_price:
     st.markdown(f"**Latest ETH Price:** ${eth_price:,.2f}")
 else:
