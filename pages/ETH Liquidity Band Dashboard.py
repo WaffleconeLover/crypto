@@ -11,6 +11,7 @@ import json
 st.set_page_config(layout="wide")
 st.title("ETH Liquidity Band Dashboard (Auto Mode Enabled)")
 
+# -- Constants --
 DEXSCREENER_API = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
 COINGECKO_API = "https://api.coingecko.com/api/v3/coins/ethereum/ohlc?vs_currency=usd&days=1"
 
@@ -48,14 +49,24 @@ def compute_heikin_ashi(df):
     return ha_df
 
 def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
-    scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_dict = json.loads(st.secrets["google_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    gc = gspread.authorize(creds)
-    worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
-    cells = worksheet.get(cell_range)
-    lines = [row[0] for row in cells if row and row[0].strip()]
-    return lines
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+        creds_dict = json.loads(st.secrets["google_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(sheet_id)
+
+        worksheet_list = [ws.title for ws in sh.worksheets()]
+        if tab_name not in worksheet_list:
+            raise ValueError(f"Worksheet '{tab_name}' not found in Google Sheet. Available sheets: {worksheet_list}")
+
+        worksheet = sh.worksheet(tab_name)
+        cells = worksheet.get(cell_range)
+        lines = [row[0] for row in cells if row and row[0].strip()]
+        return lines
+    except Exception as e:
+        st.error(f"Error loading sheet data: {e}")
+        return []
 
 def load_csv():
     return pd.read_csv("data/bands.csv")
@@ -65,6 +76,7 @@ def render_chart_from_row(row, eth_price=None):
     band_min = row["Min"]
     band_max = row["Max"]
     band_mid = (band_min + band_max) / 2
+
     dd_levels = [(level, row[level]) for level in ["Down5", "Down10", "Down15"]]
 
     df = fetch_eth_candles()
@@ -77,6 +89,7 @@ def render_chart_from_row(row, eth_price=None):
         mpf.make_addplot([band_min] * len(ha_plot_df), color='orange', linestyle='--'),
         mpf.make_addplot([band_max] * len(ha_plot_df), color='green', linestyle='--')
     ]
+
     if eth_price:
         ap_lines.append(mpf.make_addplot([eth_price] * len(ha_plot_df), color='red'))
 
@@ -118,10 +131,7 @@ def render_charts(input_text):
                 key, val = kv.split("=")
                 key = key.strip()
                 val = val.strip().replace("%", "")
-                try:
-                    parts[key] = float(val)
-                except ValueError:
-                    st.warning(f"Skipping invalid value for {key}: {val}")
+                parts[key] = float(val)
 
         band_min = parts["Min"]
         band_max = parts["Max"]
