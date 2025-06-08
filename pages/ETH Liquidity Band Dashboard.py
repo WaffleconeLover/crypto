@@ -50,8 +50,10 @@ def compute_heikin_ashi(df):
 
 def load_google_sheet_text(sheet_id, tab_name="BandSetup", cell_range="B14:B17"):
     scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_dict = json.loads(st.secrets["google_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    raw_json = st.secrets["google_service_account"]
+    parsed = json.loads(raw_json)
+    parsed["private_key"] = parsed["private_key"].replace("\\n", "\n")
+    creds = Credentials.from_service_account_info(parsed, scopes=scope)
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(sheet_id).worksheet(tab_name)
     cells = worksheet.get(cell_range)
