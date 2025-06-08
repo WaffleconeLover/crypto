@@ -7,6 +7,7 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 import json
+import time  # required for timestamp display
 
 st.set_page_config(layout="wide")
 st.title("ETH Liquidity Band Dashboard (Auto Mode Enabled)")
@@ -54,12 +55,13 @@ def load_google_sheet_text(sheet_id, tab_name="Banding", cell_range="B14:B17"):
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     gc = gspread.authorize(creds)
 
+    # 🧠 Injected metadata refresh logic
+    gc.session = gspread.Client(auth=gc.auth)
     spreadsheet = gc.open_by_key(sheet_id)
     available_tabs = [ws.title for ws in spreadsheet.worksheets()]
-    print("DEBUG - Tabs available:", available_tabs)
+    st.write("⏰ Timestamp:", time.strftime("%Y-%m-%d %H:%M:%S"))
     st.write("✅ Tabs the service account can see:", available_tabs)
 
-    # Check for exact match
     if tab_name not in available_tabs:
         st.error(f"'{tab_name}' not found in: {available_tabs}")
         raise ValueError(f"Worksheet '{tab_name}' not found")
@@ -222,24 +224,8 @@ elif mode == "From Google Sheet":
     }
 
     try:
-        # Debug tab visibility and load cells
-        scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-        creds_dict = json.loads(st.secrets["google_service_account"])
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        gc = gspread.authorize(creds)
-        spreadsheet = gc.open_by_key(sheet_id)
-        available_tabs = [ws.title for ws in spreadsheet.worksheets()]
-        print("DEBUG - Tabs available:", available_tabs)
-        st.write("✅ Tabs the service account can see:", available_tabs)
-
-        if tab_name not in available_tabs:
-            st.error(f"'{tab_name}' not found in: {available_tabs}")
-            raise ValueError(f"Worksheet '{tab_name}' not found")
-
-        worksheet = spreadsheet.worksheet(tab_name)
         cell_range = band_ranges[band_option]
-        cells = worksheet.get(cell_range)
-        lines = [row[0] for row in cells if row and row[0].strip()]
+        lines = load_google_sheet_text(sheet_id, tab_name, cell_range)
         band_text = "\n".join(lines)
         st.text_area("Band Data Pulled from Sheet", band_text, height=150)
         if band_text:
